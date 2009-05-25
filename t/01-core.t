@@ -44,14 +44,8 @@ use Book;
 }
 
 {
-    my $warn;
-    local $SIG{__WARN__} = sub{
-        $warn = shift;
-    };
-    
     my $book = Book->new( noexist => 1 );
-    is( $book->{ noexist }, 1, 'no exist attr set value' );
-    like( $warn, qr/'noexist' attribute is no exist in 'Book' class/, 'invalid key to new' );
+    ok( !$book->{ noexist }, 'no exist attr set value' );
 }
 
 # setter return value
@@ -136,7 +130,7 @@ use MyTest1;
     
     eval{ $t->r( 1 ) };
     like( $@, qr/MyTest1::r Type error/ , 'type return faluse value.' );
-    is_deeply( [ $@->type, $@->pkg, $@->attr ], [ 'type_invalid', 'MyTest1', 'r' ], 'type invalid. Object::Simple::Error object' );
+    is_deeply( [ $@->type, $@->class, $@->attr ], [ 'type_invalid', 'MyTest1', 'r' ], 'type invalid. Object::Simple::Error object' );
 }
 
 
@@ -155,7 +149,7 @@ use T2;
     
     eval{ $t->x( 3 ) };
     like( $@, qr/T2::x is read only/, 'read_only die' );
-    is_deeply( [ $@->type, $@->pkg, $@->attr ], [ 'read_only', 'T2', 'x' ], 'read only error object' );
+    is_deeply( [ $@->type, $@->class, $@->attr ], [ 'read_only', 'T2', 'x' ], 'read only error object' );
 }
 
 use T3;
@@ -221,7 +215,7 @@ use T8;
 use T9;
 {
     eval{ T9->new };
-    is_deeply( [ $@->type, $@->msg, $@->pkg, $@->attr ], [ 'attr_required', "Attr 'm1' is required.", 'T9', 'm1' ], 'new required' );
+    is_deeply( [ $@->type, $@->message, $@->class, $@->attr ], [ 'attr_required', "Attr 'm1' is required.", 'T9', 'm1' ], 'new required' );
 
 }
 
@@ -259,7 +253,7 @@ use T11;
     eval{ $t->bool( 2 ) };
     ok( $@ );
     isa_ok( $@, 'Object::Simple::Error' );
-    is_deeply( [ $@->type, $@->msg, $@->pkg, $@->attr, $@->val ],
+    is_deeply( [ $@->type, $@->message, $@->class, $@->attr, $@->value ],
         [
              'type_invalid',
              "T11::bool Type error",
@@ -342,7 +336,6 @@ use T11;
     ok( $@, 'code ref 1');
     
     # regex_ref
-    $DB::single = 1;
     eval{ $t->regexp_ref( qr// ) };
     ok( !$@, 'regexp_ref qr//');
     eval{ $t->regexp_ref( 1 ) };
@@ -374,7 +367,6 @@ use T11;
     ok($@, 'object 1');
     
     # isa
-    $DB::single = 1;
     use IO::File;
     eval{ $t->class( IO::File->new ) };
     ok( !$@, 'class IO::File');
@@ -386,6 +378,40 @@ use T11;
     eval{ $t->manual( 4 ) };
     ok( $@, 'manual 4' );
 }
+
+{
+    use T12;
+    my $t = T12->new( 1, 2 );
+    is_deeply( $t, { a => 1, b => 2, c => 3, no_rest => 1 }, '_arrange_args and _init override' );
+}
+
+
+{
+
+    eval{
+        Object::Simple::Error->throw( type => 'err_type', message => 'message', info => { a => '1' } );
+    };
+    
+    my $err_obj = Object::Simple->error;
+    is( $err_obj->type, 'err_type', 'err_obj type' );
+    is( $err_obj->message, 'message', 'err_obj message' );
+    like( $err_obj->position, qr/ at /, 'err_obj position' );
+    is_deeply( $err_obj->info, { a => 1 }, 'err_obj info' );
+    
+    my $second_err_obj = Object::Simple->error;
+    is( $err_obj->type, $second_err_obj->type, '$@ saved' );
+    
+    $@ = undef;
+    
+    ok( !Object::Simple->error, '$@ is undef' );
+    
+    $@ = "aaa";
+    
+    my $no_simo_err = Object::Simple->error;
+    is_deeply( [ $no_simo_err->type, $no_simo_err->message, $no_simo_err->position, $no_simo_err->info ],
+               [ 'unknown', 'aaa', '', {} ], 'no Object::Simple::Error' );
+}
+
 __END__
 
 

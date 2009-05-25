@@ -6,7 +6,7 @@ use warnings;
 require Carp;
 require Object::Simple::Error;
 
-our $VERSION = '0.01_01';
+our $VERSION = '0.01_02';
 
 # meta imformation( accessor option of each class )
 our $META = {};
@@ -15,7 +15,7 @@ our $META = {};
 our @ATTRIBUTES_INFO;
 
 # valid import option value
-my %VALID_IMPORT_OPT = map{ $_ => 1 } qw( base mixin );
+my %VALID_IMPORT_OPTIONS = map{ $_ => 1 } qw( base mixin );
 
 # import
 sub import{
@@ -29,33 +29,33 @@ sub import{
     @opts = %{ $opts[0] } if ref $opts[0] eq 'HASH';
     
     # check import option
-    my $import_opt = {};
+    my $import_options = {};
     while( my ( $opt, $val ) = splice( @opts, 0, 2 ) ){
-        Carp::croak "Invalid import option '$opt'" unless $VALID_IMPORT_OPT{ $opt };
-        $import_opt->{ $opt } = $val;
+        Carp::croak "Invalid import option '$opt'" unless $VALID_IMPORT_OPTIONS{ $opt };
+        $import_options->{ $opt } = $val;
     }
     
     # get caller package name
-    my $caller_pkg = caller;
+    my $caller_class = caller;
     
     # inherit base class;
-    Object::Simple::Functions::inherit_base_class( $caller_pkg, $import_opt->{ base } );
+    Object::Simple::Functions::inherit_base_class( $caller_class, $import_options->{ base } );
     
     # inherit Object::Simple;
     {
         no strict 'refs';
-        push @{ "${caller_pkg}::ISA" }, 'Object::Simple';
+        push @{ "${caller_class}::ISA" }, 'Object::Simple';
     }
     
     # import methods form mixin class;
-    Object::Simple::Functions::import_methods_form_mixin_classes( $caller_pkg, $import_opt->{ mixin } );
+    Object::Simple::Functions::import_methods_mixin_class( $caller_class, $import_options->{ mixin } );
     
     # auto strict and auto warnings
     strict->import;
     warnings->import;
     
     # define MODIFY_CODE_ATTRIBUTES for caller package
-    Object::Simple::Functions::define_MODIFY_CODE_ATTRIBUTES( $caller_pkg );
+    Object::Simple::Functions::define_MODIFY_CODE_ATTRIBUTES( $caller_class );
     
 }
 
@@ -68,10 +68,13 @@ sub new{
     my $class = ref $invocant || $invocant;
     
     # arrange arguments
-    my %args = $class->_arrange_args( @_ );
+    my $args = $class->_arrange_args( @_ );
     
     # create instance
-    my $self = Object::Simple::Functions::create_instance( $invocant, %args );
+    my $self = Object::Simple::Functions::create_instance( $invocant, $args );
+    
+    # initialize instance
+    $self->_init( $args );
     
     return $self;
 
@@ -80,15 +83,20 @@ sub new{
 # arrange arguments
 sub _arrange_args{
     
-    my ( $class , @args ) = @_;
+    my $class = shift;
     
     # arrange arguments
-    @args = %{ $args[0] } if ref $args[0] eq 'HASH';
-    Carp::croak "key-value pairs must be passed to ${class}::new" if @args % 2;
-    
-    return @args;
-    
+    if( ref $_[0] eq 'HASH' ){
+         return {%{$_[0]}};
+    }
+    else{
+        Carp::croak "key-value pairs must be passed to ${class}::new" if @_ % 2;
+        return {@_};
+    }
 }
+
+# initialize instance
+sub _init{ }
 
 # resist attribute infomathion at end of script
 sub end{
@@ -99,46 +107,46 @@ sub end{
     my $attr_names = {};
     
     # parse symbol table and create accessors
-    while ( my $pkg_and_ref = shift @Object::Simple::ATTRIBUTES_INFO ) {
+    while ( my $class_and_ref = shift @Object::Simple::ATTRIBUTES_INFO ) {
         
-        my ($pkg, $ref ) = @$pkg_and_ref;
+        my ($class, $ref ) = @$class_and_ref;
         
         # parse symbol tabel to find code reference correspond to method names
-        unless( $attr_names->{ $pkg } ) {
+        unless( $attr_names->{ $class } ) {
         
-            $attr_names->{$pkg} = {};
+            $attr_names->{$class} = {};
             
             no strict 'refs';
-            foreach my $sym ( values %{"${pkg}::"} ) {
+            foreach my $sym ( values %{"${class}::"} ) {
             
                 next unless ref(*{$sym}{CODE}) eq 'CODE';
                 
-                $attr_names->{$pkg}{*{$sym}{CODE}} = *{$sym}{NAME};
+                $attr_names->{$class}{*{$sym}{CODE}} = *{$sym}{NAME};
                 
             }
         }
         
         # get attribute name
-        my $attr = $attr_names->{ $pkg }{ $ref };
+        my $attr = $attr_names->{ $class }{ $ref };
         
         # get accessor option
-        my $ac_opt = [ $ref->() ];
+        my $attr_options = [ $ref->() ];
         
         # check accessor option
-        Object::Simple::Functions::check_accessor_option( $attr, $pkg, @$ac_opt );
+        Object::Simple::Functions::check_accessor_option( $attr, $class, @$attr_options );
         
         # accessor option convert to hash reference
-        $ac_opt = { @$ac_opt };
+        $attr_options = { @$attr_options };
         
         # resist accessor option to meta imformation
-        $Object::Simple::META->{ attr }{ $pkg }{ $attr } = $ac_opt;
+        $Object::Simple::META->{ attr }{ $class }{ $attr } = $attr_options;
         
         # create accessor
         {
             
-            my $code = Object::Simple::Functions::create_accessor( $pkg, $attr, $ac_opt );
+            my $code = Object::Simple::Functions::create_accessor( $class, $attr, $attr_options );
             no warnings qw( redefine closure );
-            eval"sub ${pkg}::${attr} $code";
+            eval"sub ${class}::${attr} $code";
             
             Carp::croak( "$code: $@" ) if $@; # for debug. never ocuured.
         
@@ -147,6 +155,23 @@ sub end{
     
     return 1;
     
+}
+
+# convert $@ to Object::Simple::Error
+sub error{
+    shift;
+    
+    return unless $@;
+    
+    my $error = $@;
+    
+    my $is_object_simple_error = eval{ $error->isa( 'Object::Simple::Error' ) };
+    my $error_object
+        = $is_object_simple_error ? $error :
+                                    Object::Simple::Error->new( message => "$error", position => '' );
+    
+    $@ = $error;
+    return $error_object;
 }
 
 package Object::Simple::Functions;
@@ -160,7 +185,8 @@ use Class::ISA;
 use Object::Simple::Constraint;
 
 sub inherit_base_class{
-    my ( $caller_pkg, $base ) = @_;
+    
+    my ( $caller_class, $base ) = @_;
     
     return unless $base;
     
@@ -169,21 +195,43 @@ sub inherit_base_class{
     Carp::croak "$@" if $@;
     
     no strict 'refs';
-    unshift @{ "${caller_pkg}::ISA" }, $base;
+    unshift @{ "${caller_class}::ISA" }, $base;
+    
 }
 
-sub import_methods_form_mixin_classes{
-    my ( $caller_pkg, $mixins ) = @_;
+sub import_methods_mixin_class{
+    
+    my ( $caller_class, $mixins ) = @_;
     return unless $mixins;
     # normalize mixin
-    my $method_infos = get_method_infos( $mixins );
+    my $method_infos = get_mixin_class_method_infos( $mixins );
     
     # import methods
-    import_methods( $caller_pkg, $method_infos );
+    foreach my $mixin_class ( keys %{ $method_infos } ){
+
+        Carp::croak "Invalid class name '$mixin_class'" if $mixin_class =~ /[^\w:]/;
+        eval "require $mixin_class;";
+        Carp::croak "$@" if $@;
+
+        my $method_info = $method_infos->{ $mixin_class };
+        
+        my ( $methods, $rename ) = parse_mixin_class_method_info( $mixin_class, $method_info );
+        
+        foreach my $method ( @{ $methods } ){
+            my $renamed_method = $rename->{ $method } || $method;
+            
+            no strict 'refs';
+            Carp::croak( "Not exsits '${mixin_class}::$method'" )
+                unless *{ "${mixin_class}::$method" }{ CODE };
+            
+            *{ "${caller_class}::$renamed_method" } = \&{ "${mixin_class}::$method" };
+        }
+    }    
 }
 
 # get method imformation form mixin option
-sub get_method_infos{
+sub get_mixin_class_method_infos{
+    
     my $mixins = shift;
     
     $mixins = [ $mixins ] unless ref $mixins eq 'ARRAY';
@@ -192,19 +240,18 @@ sub get_method_infos{
     foreach my $mixin ( @{ $mixins } ){
         
         if( ref $mixin eq 'HASH' ){
-            while( my ( $mixin_pkg, $methods ) = each %{ $mixin } ){
+            while( my ( $mixin_class, $methods ) = each %{ $mixin } ){
                 $methods = [ $methods ] unless ref $methods eq 'ARRAY';
-                if( $method_infos->{ $mixin_pkg } ){
-                    $method_infos->{ $mixin_pkg } = [ @{ $method_infos->{ $mixin_pkg } }, @{ $methods } ];
+                if( $method_infos->{ $mixin_class } ){
+                    $method_infos->{ $mixin_class } = [ @{ $method_infos->{ $mixin_class } }, @{ $methods } ];
                 }
                 else{
-                    $method_infos->{ $mixin_pkg } = $methods;
+                    $method_infos->{ $mixin_class } = $methods;
                 }
             }
         }
         else{
             if( $method_infos->{ $mixin } ){
-                $DB::single = 1;
                 $method_infos->{ $mixin } = [ @{ $method_infos->{ $mixin } }, undef ];
             }
             else{
@@ -213,37 +260,13 @@ sub get_method_infos{
         }
     }
     return $method_infos;
+    
 }
 
-# import methods form mixin package to caller package
-sub import_methods{
-    my ( $caller_pkg, $mixin_info ) = @_;
-    foreach my $mixin_pkg ( keys %{ $mixin_info } ){
-
-        Carp::croak "Invalid class name '$mixin_pkg'" if $mixin_pkg =~ /[^\w:]/;
-        eval "require $mixin_pkg;";
-        Carp::croak "$@" if $@;
-
-        my $methods = $mixin_info->{ $mixin_pkg };
-        
-        my $rename;
-        ( $methods, $rename ) = expand_methods( $mixin_pkg, $methods );
-        
-        foreach my $method ( @{ $methods } ){
-            my $renamed_method = $rename->{ $method } || $method;
-            
-            no strict 'refs';
-            Carp::croak( "Not exsits '${mixin_pkg}::$method'" )
-                unless *{ "${mixin_pkg}::$method" }{ CODE };
-            
-            *{ "${caller_pkg}::$renamed_method" } = \&{ "${mixin_pkg}::$method" };
-        }
-    }
-}
-
-# expand methods
-sub expand_methods{
-    my ( $mixin_pkg, $methods ) = @_;
+# parse method info
+sub parse_mixin_class_method_info{
+    
+    my ( $mixin_class, $methods ) = @_;
     
     my %methods; # no dupulicate method list
     my $rename = {};
@@ -252,16 +275,16 @@ sub expand_methods{
         
         if( !defined $method ){
             no strict 'refs';
-            %methods = ( %methods, map { $_ => 1 } @{ "${mixin_pkg}::EXPORT" } );
+            %methods = ( %methods, map { $_ => 1 } @{ "${mixin_class}::EXPORT" } );
         }
         elsif( $method =~ /^:(\w+)$/ ){
             my $tag = $1;
             no strict 'refs';
-            my %export_tags = %{ "${mixin_pkg}::EXPORT_TAGS" };
-            Carp::croak( "Not exists :$tag in \@${mixin_pkg}::EXPORT_TAGS" )
+            my %export_tags = %{ "${mixin_class}::EXPORT_TAGS" };
+            Carp::croak( "Not exists :$tag in \@${mixin_class}::EXPORT_TAGS" )
                 unless exists $export_tags{ $tag };
             
-            my $methods = ${ "${mixin_pkg}::EXPORT_TAGS" }{ $tag };
+            my $methods = ${ "${mixin_class}::EXPORT_TAGS" }{ $tag };
             %methods = ( %methods, map { $_ => 1 } @{ $methods } );
         }
         elsif( $method =~ /^(\w+)=>(\w+)$/ ){
@@ -277,70 +300,69 @@ sub expand_methods{
         }
     }
     return ( [ keys %methods ], $rename );
+    
 }
 
 # create instance
 sub create_instance{
-    my ( $invocant, %args ) = @_;
+    
+    my ( $invocant, $args ) = @_;
     
     # bless
     my $self = {};
-    my $pkg = ref $invocant || $invocant;
-    bless $self, $pkg;
+    my $class = ref $invocant || $invocant;
+    bless $self, $class;
     
     # merge self and parent accessor option
-    my $ac_opt = merge_self_and_super_accessor_option( $pkg );
+    my $attr_options = merge_self_and_super_accessor_option( $class );
     
     # initialize hash slot
-    foreach my $attr ( keys %{ $ac_opt } ){
-        my $arg = $args{ $attr };
-        my $required = $ac_opt->{ $attr }{ required };
+    foreach my $attr ( keys %{ $attr_options } ){
+        my $arg = delete $args->{ $attr };
+        my $required = $attr_options->{ $attr }{ required };
         
         if( $required && !defined $arg ){
             Object::Simple::Error->throw(
                 type => 'attr_required',
-                msg => "Attr '$attr' is required.",
-                pkg => $pkg,
+                message => "Attr '$attr' is required.",
+                class => $class,
                 attr => $attr
             );            
         }
         
-        my $default = $ac_opt->{ $attr }{ default };
-        
         if( defined $arg ){
             $self->$attr( $arg );
-            delete $args{ $attr };
         }
-        elsif( defined $default ){
+        elsif( my $default = $attr_options->{ $attr }{ default } ){
+            
             $self->{ $attr } = ref $default ? Storable::dclone( $default ) :
                                               $default;
         }
     }
     
-    # attribute is no exist
-    foreach my $attr ( keys %args ){
-        $self->{ $attr } = $args{ $attr };
-        Carp::carp( "'$attr' attribute is no exist in '$pkg' class." )
-    }
     return $self;
+    
 }
 
 # marge self and super accessor option
 sub merge_self_and_super_accessor_option{
-    my $pkg = shift;
     
-    my @self_and_super_classes = reverse Class::ISA::self_and_super_path($pkg);
-    my $ac_opt = {};
+    my $class = shift;
+    
+    my @self_and_super_classes = reverse Class::ISA::self_and_super_path($class);
+    my $attr_options = {};
     
     foreach my $class ( @self_and_super_classes ){
-        $ac_opt = { %{ $ac_opt }, %{ $Object::Simple::META->{ attr }{ $class } } }
+        $attr_options = { %{ $attr_options }, %{ $Object::Simple::META->{ attr }{ $class } } }
             if defined $Object::Simple::META->{ attr }{ $class }
     }
-    return $ac_opt;
+    return $attr_options;
+    
 }
 
 # type constraint functions
 our %TYPE_CONSTRAIMT = (
+
     Bool       => \&Object::Simple::Constraint::is_bool,
     Undef      => sub { !defined($_[0]) },
     Defined    => sub { defined($_[0]) },
@@ -359,6 +381,7 @@ our %TYPE_CONSTRAIMT = (
     GlobRef    => \&Object::Simple::Constraint::is_glob_ref,
     FileHandle => \&Object::Simple::Constraint::is_file_handle,
     Object     => \&Object::Simple::Constraint::is_object
+    
 );
 
 # valid setter return option values
@@ -366,14 +389,15 @@ my %VALID_SETTER_RETURN = map { $_ => 1 } qw( undef old current self );
 
 # create accessor.
 sub create_accessor{
-    my ( $pkg, $attr, $ac_opt ) = @_;
+    
+    my ( $class, $attr, $attr_options ) = @_;
     
     my $e =
             qq/{\n/ .
             # arg recieve
             qq/    my \$self = shift;\n\n/;
 
-    if( my $auto_build = $ac_opt->{ auto_build } ){
+    if( my $auto_build = $attr_options->{ auto_build } ){
         unless( ref $auto_build eq 'CODE' ){
             # automatically call build method
             my $build_method = $attr;
@@ -381,26 +405,26 @@ sub create_accessor{
                 $build_method = $1 . "build_$attr";
             }
             
-            Carp::croak( "'$build_method' must exist in '$pkg' when 'auto_build' option is set." )
-                unless $pkg->can( $build_method );
+            Carp::croak( "'$build_method' must exist in '$class' when 'auto_build' option is set." )
+                unless $class->can( $build_method );
             
-            $ac_opt->{ auto_build } = \&{ "${pkg}::${build_method}" };
+            $attr_options->{ auto_build } = \&{ "${class}::${build_method}" };
         }
         
         $e .=
             qq/    if( !\@_ && ! defined \$self->{ $attr } ){\n/ .
-            qq/        \$ac_opt->{ auto_build }->( \$self );\n/ .
+            qq/        \$attr_options->{ auto_build }->( \$self );\n/ .
             qq/    }\n/ .
             qq/    \n/;
     }
     
-    if ( $ac_opt->{ read_only } ){
+    if ( $attr_options->{ read_only } ){
         $e .=
             qq/    if( \@_ ){\n/ .
             qq/        Object::Simple::Error->throw(\n/ .
             qq/            type => 'read_only',\n/ .
-            qq/            msg => "${pkg}::$attr is read only",\n/ .
-            qq/            pkg => "$pkg",\n/ .
+            qq/            message => "${class}::$attr is read only",\n/ .
+            qq/            class => "$class",\n/ .
             qq/            attr => "$attr"\n/ .
             qq/        );\n/ .
             qq/    }\n\n/;
@@ -410,11 +434,11 @@ sub create_accessor{
         $e .=
             qq/    if( \@_ ){\n/;
         
-        if( my $type = $ac_opt->{ type }){
+        if( my $type = $attr_options->{ type }){
             
             if( ref $type eq 'CODE' ){
             $e .=
-            qq/        my \$ret = \$ac_opt->{ type }->( \$_[0] );\n\n/;
+            qq/        my \$ret = \$attr_options->{ type }->( \$_[0] );\n\n/;
             }
             elsif( $Object::Simple::Functions::TYPE_CONSTRAIMT{ $type } ){
             $e .=
@@ -429,18 +453,18 @@ sub create_accessor{
             qq/        if( !\$ret ){\n/ .
             qq/            Object::Simple::Error->throw(\n/ .
             qq/                type => 'type_invalid',\n/ .
-            qq/                msg => "${pkg}::$attr Type error",\n/ .
-            qq/                pkg => "$pkg",\n/ .
+            qq/                message => "${class}::$attr Type error",\n/ .
+            qq/                class => "$class",\n/ .
             qq/                attr => "$attr",\n/ .
-            qq/                val => \$_[0]\n/ .
+            qq/                value => \$_[0]\n/ .
             qq/            );\n/ .
             qq/        }\n\n/;
         }
         
         # setter return value;
-        my $setter_return = $ac_opt->{ setter_return };
+        my $setter_return = $attr_options->{ setter_return };
         $setter_return  ||= 'undef';
-        Carp::croak( "${pkg}::$attr 'setter_return' option must be 'undef', 'old', 'current', or 'self'." )
+        Carp::croak( "${class}::$attr 'setter_return' option must be 'undef', 'old', 'current', or 'self'." )
             unless $VALID_SETTER_RETURN{ $setter_return };
         
         if( $setter_return eq 'old' ){
@@ -452,7 +476,7 @@ sub create_accessor{
         $e .=
             qq/        \$self->{ $attr } = \$_[0];\n\n/;
         
-        if( $ac_opt->{ weak } ){
+        if( $attr_options->{ weak } ){
             $e .=
             qq/        Scalar::Util::weaken( \$self->{ \$attr } )\n/ .
             qq/            if ref \$self->{ $attr };\n\n/;
@@ -481,17 +505,37 @@ sub create_accessor{
             qq/}\n/;
     
     return $e;
+    
+}
+
+# accessor option
+my %VALID_ATTR_OPTIOTNS 
+    = map{ $_ => 1 } qw( default type read_only auto_build setter_return required weak );
+
+# check accessor option
+sub check_accessor_option{
+    
+    # accessor info
+    my ( $attr, $class, @attr_options ) = @_;
+    
+    my $hook_options_exist = {};
+    while( my( $key, $val ) = splice( @attr_options, 0, 2 ) ){
+        Carp::croak "${class}::$attr '$key' is invalid accessor option" 
+            unless $VALID_ATTR_OPTIOTNS{ $key };
+    }
+    
 }
 
 sub define_MODIFY_CODE_ATTRIBUTES{
-    my $caller_pkg = shift;
+    
+    my $caller_class = shift;
     my $e .=
-        qq/package ${caller_pkg};\n/ .
+        qq/package ${caller_class};\n/ .
         qq/sub MODIFY_CODE_ATTRIBUTES {\n/ .
         qq/\n/ .
-        qq/    my (\$pkg, \$ref, \@attrs) = \@_;\n/ .
+        qq/    my (\$class, \$ref, \@attrs) = \@_;\n/ .
         qq/    if( \$attrs[0] eq 'Attr' ){\n/ .
-        qq/        push( \@Object::Simple::ATTRIBUTES_INFO, [\$pkg, \$ref ]);\n/ .
+        qq/        push( \@Object::Simple::ATTRIBUTES_INFO, [\$class, \$ref ]);\n/ .
         qq/    }\n/ .
         qq/    else{\n/ .
         qq/        die "'\$attrs[0]' is bad. attribute must be 'Attr'";\n/ .
@@ -501,25 +545,8 @@ sub define_MODIFY_CODE_ATTRIBUTES{
     
     eval $e;
     if( $@ ){ die "Cannot execute\n $e" }; # never occured.
-}
-
-# accessor option
-my %VALID_AC_OPT 
-    = map{ $_ => 1 } qw( default type read_only auto_build setter_return required weak );
-
-# check accessor option
-sub check_accessor_option{
-    # accessor info
-    my ( $attr, $pkg, @ac_opt ) = @_;
     
-    my $hook_options_exist = {};
-    while( my( $key, $val ) = splice( @ac_opt, 0, 2 ) ){
-        Carp::croak "${pkg}::$attr '$key' is invalid accessor option" 
-            unless $VALID_AC_OPT{ $key };
-    }
 }
-
-
 
 =head1 NAME
 
@@ -527,7 +554,7 @@ Object::Simple - Very simple framework for Object Oriented Perl.
 
 =head1 VERSION
 
-Version 0.01_01
+Version 0.01_02
 
 =cut
 
