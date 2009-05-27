@@ -1,6 +1,6 @@
 ---
 name: Object-Simple
-version: 0.01_02
+version: 0.0201
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
 abstract: Very simple framework for Object Oriented Perl.
@@ -8,8 +8,8 @@ license: perl
 resources:
   license: ~
 requires:
-  Object::Simple::Constraint: 0
-  Object::Simple::Error: 0
+  Object::Simple::Constraint: 0.0201
+  Object::Simple::Error: 0.0201
   Scalar::Util: 1.14
   Storable: 0
 build_requires:
@@ -17,7 +17,7 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 0.01_02
+    version: 0.0201
   Object::Simple::Functions:
     file: lib/Object/Simple.pm
 generated_by: Module::Build version 0.31012

@@ -48,6 +48,11 @@ use Book;
     ok( !$book->{ noexist }, 'no exist attr set value' );
 }
 
+{
+    my $book = Book->new( title => undef );
+    ok( exists $book->{ title } && !defined $book->{ title } , 'new undef pass' );
+}
+
 # setter return value
 {
     my $book = Book->new;
@@ -95,8 +100,8 @@ use Point;
 }
 {
     my $p = Point->new;
-    is_deeply( $p, { x => 1, y => 1, p => $Object::Simple::META->{ attr }{ Point }{ p }{ default } }, 'default overwrited' );
-    cmp_ok( ref $Object::Simple::META->{ attr }{ Point }{ p }{ default }, 'ne', $p->p, 'default different ref' );
+    is_deeply($p, {x => 1, y => 1, p => $Object::Simple::META->{attr_options}{Point}{p}{default}}, 'default overwrited' );
+    cmp_ok(ref $Object::Simple::META->{attr_options}{Point}{p}{default}, 'ne', $p->p, 'default different ref' );
 }
 
 use MyTest1;
@@ -410,6 +415,13 @@ use T11;
     my $no_simo_err = Object::Simple->error;
     is_deeply( [ $no_simo_err->type, $no_simo_err->message, $no_simo_err->position, $no_simo_err->info ],
                [ 'unknown', 'aaa', '', {} ], 'no Object::Simple::Error' );
+}
+
+{
+    use T13;
+    my $t = T13->new;
+    is_deeply($t, {title => 1, author => 3}, 'override');
+    
 }
 
 __END__
