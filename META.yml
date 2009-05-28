@@ -1,9 +1,9 @@
 ---
 name: Object-Simple
-version: 0.0201
+version: 0.0202
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
-abstract: Very simple framework for Object Oriented Perl.
+abstract: Light Weight Minimal Object System
 license: perl
 resources:
   license: ~
@@ -17,7 +17,7 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 0.0201
+    version: 0.0202
   Object::Simple::Functions:
     file: lib/Object/Simple.pm
 generated_by: Module::Build version 0.31012

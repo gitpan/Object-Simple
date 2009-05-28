@@ -63,6 +63,13 @@ use Book;
     ok( !$current, 'return old value in case setter is called' );
 }
 
+{
+    my $t = Book->new( price => 6 );
+    my $c = $t->new;
+    is($c->price, 1, 'call new from object');
+    
+}
+
 # reference
 {
     my $book = Book->new;
@@ -385,13 +392,6 @@ use T11;
 }
 
 {
-    use T12;
-    my $t = T12->new( 1, 2 );
-    is_deeply( $t, { a => 1, b => 2, c => 3, no_rest => 1 }, '_arrange_args and _init override' );
-}
-
-
-{
 
     eval{
         Object::Simple::Error->throw( type => 'err_type', message => 'message', info => { a => '1' } );
@@ -423,6 +423,15 @@ use T11;
     is_deeply($t, {title => 1, author => 3}, 'override');
     
 }
+
+eval "use T15";
+like($@, qr/'A' is bad. attribute must be 'Attr'/, 'bat attribute name');
+
+eval "use T16";
+like($@, qr/T16::m1 'setter_return' option must be 'undef', 'old', 'current', or 'self'/, 'setter return invalid');
+
+
+
 
 __END__
 
