@@ -5,7 +5,7 @@ use warnings;
  
 require Carp;
  
-our $VERSION = '1.0003';
+our $VERSION = '2.0001';
  
 # meta imformation
 our $META = {};
@@ -14,8 +14,8 @@ our $META = {};
 our @ATTRIBUTES_INFO;
  
 # valid import option value
-my %VALID_IMPORT_OPTIONS = map {$_ => 1} qw(base mixins);
- 
+my %VALID_IMPORT_OPTIONS = map {$_ => 1} qw(base mixins mixins_rename );
+
 # import
 sub import {
     my ($self, %options) = @_;
@@ -41,9 +41,11 @@ sub import {
         push @{"${caller_class}::ISA"}, 'Object::Simple';
     }
     
-    # import methods form mixin classes;
-    Object::Simple::Functions::import_method_from_mixin_classes($caller_class, $options{mixins})
-        if $options{mixins};
+    # mixin classes
+    $Object::Simple::META->{$caller_class}{mixins} = $options{mixins};
+    
+    # mixin methods rename
+    $Object::Simple::META->{$caller_class}{mixins_rename} = $options{mixins_rename};
     
     # auto strict and auto warnings
     strict->import;
@@ -71,7 +73,7 @@ sub new {
     return $META->{$class}{constructor}->($class,@_)
         if $META->{$class}{constructor};
     
-    foreach my $super_class (@{Object::Simple::Functions::get_linear_isa($class)}) {
+    foreach my $super_class (@{Object::Simple::Functions::get_leftmost_isa($class)}) {
         if($META->{$super_class}{constructor}) {
             $META->{$class}{constructor} = $META->{$super_class}{constructor};
             return $META->{$class}{constructor}->($class,@_);
@@ -126,7 +128,9 @@ sub end {
         # create accessor source code
         $accessor_code .= Object::Simple::Functions::create_accessor($class, $attr);
     }
-    if($caller_class eq 'T19::AAA'){ $DB::single = 1 }
+    
+    $Object::Simple::META->{$caller_class}{attr_options} = {}
+        unless $Object::Simple::META->{$caller_class}{attr_options};
     
     # create accessor
     if($accessor_code){
@@ -134,6 +138,10 @@ sub end {
         eval $accessor_code;
         Carp::croak("$accessor_code\n:$@") if $@;
     }
+    
+    # include mixin classes
+    Object::Simple::Functions::include_mixin_classes($caller_class)
+        if $Object::Simple::META->{$caller_class}{mixins};
     
     # create constructor
     my $constructor_code = Object::Simple::Functions::create_constructor($caller_class);
@@ -144,102 +152,85 @@ sub end {
 }
  
 package Object::Simple::Functions;
- 
-# get self and parent classes
-sub get_linear_isa {
-    my $classname = shift;
+
+# get leftmost self and parent classes
+sub get_leftmost_isa {
+    my $class = shift;
+    my @leftmost_isa;
     
-    my @lin = ($classname);
-    my %stored;
+    # sortcut
+    return unless $class;
+    
+    my $leftmost_parent = $class;
+    push @leftmost_isa, $leftmost_parent;
     
     no strict 'refs';
-    foreach my $parent (@{"$classname\::ISA"}) {
-        my $plin = get_linear_isa($parent);
-        foreach (@$plin) {
-            next if exists $stored{$_};
-            push(@lin, $_);
-            $stored{$_} = 1;
-        }
+    while( $leftmost_parent = ${"${leftmost_parent}::ISA"}[0] ) {
+        push @leftmost_isa, $leftmost_parent;
     }
-    return \@lin;
+    
+    return \@leftmost_isa;
 }
- 
+
 # inherit base class
 sub inherit_base_class{
     my ($caller_class, $base) = @_;
     
     Carp::croak("Invalid class name '$base'") if $base =~ /[^\w:]/;
-    eval "require $base;";
-    Carp::croak("$@") if $@;
+    
+    unless($base->can('isa')) {
+        eval "require $base;";
+        Carp::croak("$@") if $@;
+    }
     
     no strict 'refs';
     unshift @{"${caller_class}::ISA"}, $base;
 }
- 
-# import mixin class' methods
-my %VALID_MIXIN_OPTIONS = map {$_ => 1} qw/rename select/;
-sub import_method_from_mixin_classes {
-    my ($caller_class, $mixin_infos) = @_;
+
+# include mixin classes
+sub include_mixin_classes {
+    my $caller_class = shift;
     
-    Carp::croak("mixins must be array reference.") if ref $mixin_infos ne 'ARRAY';
+    my $mixin_classes = $Object::Simple::META->{$caller_class}{mixins};
+    Carp::croak("mixins must be array reference.") unless ref $mixin_classes eq 'ARRAY';
     
-    # import methods
-    foreach my $mixin_info (@$mixin_infos) {
-        my $mixin_class;
-        my $options = {};
-        
-        if (!ref $mixin_info) {
-            $mixin_class = $mixin_info;
-        }
-        elsif (ref $mixin_info eq 'ARRAY') {
-            my @options;
-            ($mixin_class, @options) = @$mixin_info;
-            $mixin_class ||= '';
-            
-            Carp::croak("mixin option must be key-value pairs.")
-               if @options % 2;
-            $options = {@options};
-        }
-        else {
-            Carp::croak("mixins item must be class name or array reference. $mixin_info is bad.");
-        }
-        
+    # check mixins_rename
+    my $mixins_rename = $Object::Simple::META->{$caller_class}{mixins_rename} || {};
+    Carp::croak("'mixins_rename' must be hash reference") unless ref $mixins_rename eq 'HASH';
+    
+    # include mixin classes
+    no strict 'refs';
+    no warnings 'redefine';
+    
+    foreach my $mixin_class (@$mixin_classes) {
         Carp::croak("Invalid class name '$mixin_class'") if $mixin_class =~ /[^\w:]/;
         
-        eval "require $mixin_class;";
-        Carp::croak($@) if $@;
         
-        my $methods;
-        if (my $select = $options->{select}) {
-            Carp::croak("mixins select options must be array reference.")
-                unless ref $select eq 'ARRAY';
-            $methods = $select;
-        }
-        else {
-            no strict 'refs';
-            $methods = [@{"${mixin_class}::EXPORT"}];
-        };
-        
-        Carp::croak("methods is not exist in \@${mixin_class}::EXPORT.")
-            unless @$methods;        
-        
-        foreach my $option (keys %$options) {
-            Carp::croak("mixin option '$option' is invalid")
-                unless $VALID_MIXIN_OPTIONS{$option};
+        unless($mixin_class->can('isa')) {
+            eval "require $mixin_class;";
+            Carp::croak("$@") if $@;
         }
         
-        foreach my $method (@$methods) {
-            my $rename = $options->{rename} || {};
+        # import all methods
+        foreach my $method ( keys %{"${mixin_class}::"} ) {
+            next unless defined &{"${mixin_class}::$method"};
+            next if $method eq 'new';
             
-            my $renamed_method = $rename->{$method} || $method;
-            delete $rename->{$method};
-            
-            no strict 'refs';
-            Carp::croak("Not exsits '${mixin_class}::$method'")
-                unless *{"${mixin_class}::$method"}{CODE};
-            *{"${caller_class}::$renamed_method"} = \&{"${mixin_class}::$method"};
+            if(my $rename = $mixins_rename->{"${mixin_class}::$method"}) {
+                Carp::croak("rename '$rename' must be method_name") if $rename =~ /[^\w_]/;
+                *{"${caller_class}::$rename"} = \&{"${mixin_class}::$method"};
+            }
+            else {
+                *{"${caller_class}::$method"} = \&{"${mixin_class}::$method"};
+            }
         }
-        Carp::croak("Fail $mixin_class mixin rename.") if keys %{$options->{rename}};
+        
+        # mearge attr options to caller class
+        if($Object::Simple::META->{$mixin_class}{attr_options}) {
+            $Object::Simple::META->{$caller_class}{attr_options}
+                = { %{$Object::Simple::META->{$caller_class}{attr_options}}, 
+                    %{$Object::Simple::META->{$mixin_class}{attr_options}}    }
+        }
     }
 }
  
@@ -252,7 +243,7 @@ sub merge_self_and_super_accessor_option {
       if $Object::Simple::META->{$class}{merged_attr_options};
     
     my $self_and_super_classes
-      = Object::Simple::Functions::get_linear_isa($class);
+      = Object::Simple::Functions::get_leftmost_isa($class);
     
     my $attr_options = {};
     
@@ -268,6 +259,7 @@ sub merge_self_and_super_accessor_option {
 # create constructor
 sub create_constructor {
     my $class = shift;
+    
     my $attr_options = merge_self_and_super_accessor_option($class);
     
     my $code =      qq/sub {\n/ .
@@ -278,14 +270,31 @@ sub create_constructor {
                     qq/    bless \$self, \$class;\n/;
             
     foreach my $attr (keys %$attr_options) {
+        if (my $convert = $attr_options->{$attr}{convert}) {
+            if(ref $convert eq 'CODE') {
+                $code .=
+                qq/        \$self->{$attr} = \$Object::Simple::META->{'$class'}{merged_attr_options}{'$attr'}{convert}->(\$self->{$attr});\n/;
+            }
+            else {
+                require Scalar::Util;
+                
+                $code .=
+                qq/        require $convert;\n/ .
+                qq/        \$self->{$attr} = $convert->new(\$self->{$attr}) if defined \$self->{$attr} && !Scalar::Util::blessed(\$self->{$attr});\n/;
+            }
+        }
+        
         if(exists $attr_options->{$attr}{default}) {
-            if(ref $attr_options->{$attr}{default}) {
+            if(ref $attr_options->{$attr}{default} eq 'CODE') {
                 $code .=
                     qq/    \$self->{$attr} ||= \$META->{'$class'}{merged_attr_options}{$attr}{default}->();\n/;
             }
-            else{
+            elsif(!ref $attr_options->{$attr}{default}) {
                 $code .=
                     qq/    \$self->{$attr} ||= \$META->{'$class'}{merged_attr_options}{$attr}{default};\n/;
+            }
+            else {
+                Carp::croak("Value of 'default' option must be a code reference or constant value(${class}::$attr)");
             }
         }
         
@@ -300,15 +309,43 @@ sub create_constructor {
                     qq/}\n/;
 }
 
+# valid type
+my %VALID_TYPE = map {$_ => 1} qw/array hash/;
+
 # create accessor.
 sub create_accessor {
     
     my ($class, $attr) = @_;
     
-    my ($auto_build, $read_only, $chained, $weak)
-      = @{$Object::Simple::META->{$class}{attr_options}{$attr}}{qw/auto_build read_only chained weak/};
+    my ($auto_build, $read_only, $chained, $weak, $type, $convert, $deref)
+      = @{$Object::Simple::META->{$class}{attr_options}{$attr}}{qw/auto_build read_only chained weak type convert deref/};
     
+    my $value = '$_[1]';
+    
+    # check type
+    Carp::croak("'type' option must be 'array' or 'hash' (${class}::$attr)")
+        if $type && !$VALID_TYPE{$type};
+    
+    # check deref
+    Carp::croak("'deref' option must be specified with 'type' option (${class}::$attr)")
+        if $deref && !$type;
+
     my $code =  qq/sub ${class}::$attr {\n/;
+    
+    $code .=    qq/my \$value;\n/ if $type || $convert;
+    
+    # argument type
+    if($type) {
+        if($type eq 'array') {
+            $code .=
+                qq/    \$value = ref \$_[1] eq 'ARRAY' ? \$_[1] : [\@_[1 .. \$#_]];\n/;
+        }
+        else {
+            $code .=
+                qq/    \$value = ref \$_[1] eq 'HASH' ? \$_[1] : {\@_[1 .. \$#_]};\n/;
+        }
+        $value = '$value';
+    }
     
     # automatically call build method
     if($auto_build){
@@ -317,7 +354,7 @@ sub create_accessor {
                 qq/    if(\@_ == 1 && ! exists \$_[0]->{'$attr'}) {\n/;
         
         if(ref $auto_build eq 'CODE') {
-        $code .=
+            $code .=
                 qq/        \$Object::Simple::META->{'$class'}{attr_options}{'$attr'}{auto_build}->(\$_[0]);\n/;
         }
         else {
@@ -331,7 +368,7 @@ sub create_accessor {
         }
         
         $code .=
-                qq/    }\n\n/;
+                qq/    }\n/;
     }
     
     if ($read_only){
@@ -343,24 +380,40 @@ sub create_accessor {
     else {
         $code .=
                 qq/    if(\@_ > 1) {\n/;
- 
+        
+        # convert to object;
+        if ($convert) {
+            if(ref $convert eq 'CODE') {
+                $code .=
+                qq/        \$value = \$Object::Simple::META->{'$class'}{attr_options}{'$attr'}{convert}->($value);\n/;
+            }
+            else {
+                require Scalar::Util;
+                
+                $code .=
+                qq/        require $convert;\n/ .
+                qq/        \$value = defined $value && !Scalar::Util::blessed($value) ? $convert->new($value) : $value ;\n/;
+            }
+            $value = '$value';
+        }
+        
         # Store argument optimized
         if (!$weak && !$chained) {
             $code .=
-                qq/        return \$_[0]->{'$attr'} = \$_[1];\n/;
+                qq/        return \$_[0]->{'$attr'} = $value;\n/;
         }
- 
+        
         # Store argument the old way
         else {
             $code .=
-                qq/        \$_[0]->{'$attr'} = \$_[1];\n\n/;
+                qq/        \$_[0]->{'$attr'} = $value;\n/;
         }
         
         # Weaken
         if ($weak) {
             require Scalar::Util;
             $code .=
-                qq/        Scalar::Util::weaken(\$_[0]->{'$attr'});\n\n/;
+                qq/        Scalar::Util::weaken(\$_[0]->{'$attr'});\n/;
         }
         
         # Return value or instance for chained/weak
@@ -368,25 +421,35 @@ sub create_accessor {
             $code .=
                 qq/        return \$_[0];\n/;
         }
-        elsif ($weak) {
-            $code .=
-                qq/        return \$_[0]->{'$attr'}\n/;
-        }
         
         $code .=
                 qq/    }\n/;
     }
     
-    # getter return value
-    $code .=    qq/    return \$_[0]->{'$attr'};\n/ .
-                qq/}\n\n/;
+    # derifference
+    if ($deref) {
+        if ($type eq 'array') {
+            $code .=
+                qq/    return wantarray ? \@{\$_[0]->{'$attr'}} : \$_[0]->{'$attr'};\n/;
+        }
+        else {
+            $code .=
+                qq/    return wantarray ? \%{\$_[0]->{'$attr'}} : \$_[0]->{'$attr'};\n/;
+        }
+    }
+    else {
+        $code .=
+                qq/    return \$_[0]->{'$attr'};\n/;
+    }
+    
+    $code .=    qq/}\n\n/;
     
     return $code;
 }
  
 # valid accessor options
 my %VALID_ATTR_OPTIOTNS 
-    = map {$_ => 1} qw(default chained weak read_only auto_build);
+    = map {$_ => 1} qw(default chained weak read_only auto_build type convert deref);
  
 # check accessor options
 sub check_accessor_option {
@@ -395,12 +458,6 @@ sub check_accessor_option {
     foreach my $key ( keys %$attr_options ){
         Carp::croak("${class}::$attr '$key' is invalid accessor option.")
             unless $VALID_ATTR_OPTIOTNS{ $key };
-        if($key eq 'default' &&
-           !(!ref $attr_options->{default} ||
-             ref $attr_options->{default} eq 'CODE'))
-        {
-            Carp::croak("${class}::$attr 'default' has to be a code reference or constant value.");
-        }
     }
 }
  
@@ -429,7 +486,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 1.0003
+Version 2.0001
  
 =head1 FEATURES
  
@@ -482,6 +539,18 @@ writing new and accessors repeatedly.
     
     # method chaine
     sub title : Attr { chained => 1 }
+    
+    # variable type
+    sub authors : Attr { type => 'array' }
+    sub country : Attr { type => 'hash' }
+    
+    # convert to object
+    sub url : Attr { convert => 'URI' }
+    sub url : Attr { convert => sub{ ref $_[0] ? $_[0] : URI->new($_[0]) } }
+    
+    # derefference of returned value
+    sub authors : Attr { type => 'array', deref => 1 }
+    sub country_id : Attr { type => 'hash',  deref => 1 }
     
     # Inheritance
     package Magazine;
@@ -588,7 +657,47 @@ You can chain method
 attribute value is weak reference.
  
     sub parent : Attr {weak => 1}
- 
+
+=head2 type
+
+You can specify variable type( array, hash );
+
+    # variable type
+    sub authors : Attr { type => 'array' }
+    sub country_id : Attr { type => 'hash' }
+
+If you specity 'array', arguments is automatically converted to array reference
+
+     $book->authors('ken', 'taro'); # ('ken', 'taro') -> ['ken', 'taro']
+     $book->authors('ken');         # ('ken')         -> ['ken']
+
+If you specity 'hash', arguments is automatically converted to hash reference
+
+     $book->country_id(Japan => 1); # (Japan => 1)    -> {Japan => 1}
+
+=head2 convert
+
+You can convert a non blessed scalar value to object.
+
+    sub url : Attr { convert => 'URI' }
+    
+    $book->url('http://somehost'); # convert to URI->new('http://somehost')
+
+You can also convert a scalar value using your convert function.
+
+    sub url : Attr { convert => sub{ ref $_[0] ? $_[0] : URI->new($_[0]) } }
+
+
+=head2 deref
+
+You can derefference returned value.You must specify it with 'type' option.
+    
+    sub authors : Attr { type => 'array', deref => 1 }
+    sub country_id : Attr { type => 'hash',  deref => 1 }
+
+    my @authors = $book->authors;
+    my %country_id = $book->country_id;
+
 =head1 INHERITANCE
  
     # Inheritance
@@ -610,32 +719,35 @@ Object::Simple support mixin syntax
         ]
     );
  
-This is nearly equel to
- 
-    package Book;
-    use Object::Simple;
-    
-    use Object::Simple::Mixin::AttrNames;
-    use Object::Simple::Mixin::AttrOptions;
- 
-Methods in @EXPORT is imported.
- 
+All methods is imported to Book.If a same named methods is exist, the method is overwrited by mixin method.
+
 You can rename method if methods name crash.
  
     use Object::Simple( 
-        mixins => [ 
-            ['Some::Mixin', rename => { 'mehtod' => 'renamed_method' }]
-        ]
+        mixins => [ 'Some::Mixin' ]
+        mixins_rename => { 'Somo::Mixin::mehtod' => 'renamed_method' }
     );
- 
-You can select methods if you want to import some methods 
- 
-    use Object::Simple( 
-        mixins => [ 
-            ['Some::Mixin', select => ['method1', 'method2']]
-        ]
-    );
- 
+
+Object::Simple mixin merge mixin class attribute.
+    
+    # mixin class
+    package Some::Mixin;
+    use Object::Simple;
+    
+    sub m2 : Attr {}
+    
+    Object::Simple->end;
+
+    # using mixin class
+    package Some::Class;
+    use Object::Simple( mixins => [ 'Some::Mixin' ] );
+    
+    sub m1 : Attr {}
+    
+    Object::Simple->end;
+
+Because Some::Mixin is mixined, Some::Class has two attribute m1 and m2.
+
 =head1 using your MODIFY_CODE_ATTRIBUTES subroutine
  
 Object::Simple define own MODIFY_CODE_ATTRIBUTES subroutine.
