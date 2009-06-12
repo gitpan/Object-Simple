@@ -66,10 +66,6 @@ t/04-extend2/PBook.pm
 t/05-extend3.t
 t/05-extend3/Book.pm
 t/05-extend3/PBook.pm
-t/06-extend-multi.t
-t/06-extend-multi/Book1.pm
-t/06-extend-multi/Book2.pm
-t/06-extend-multi/Book3.pm
 t/07-supernew.t
 t/07-supernew/Book.pm
 t/07-supernew/PBook.pm
