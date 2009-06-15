@@ -1,11 +1,12 @@
 package Object::Simple;
 use 5.008_001;
 use strict;
+no strict 'refs';
 use warnings;
  
 require Carp;
  
-our $VERSION = '2.0005';
+our $VERSION = '2.0006';
 
 # Meta imformation
 our $META = {};
@@ -15,7 +16,7 @@ our @BUILD_NEED_CLASSES;
 our @ATTRIBUTES_INFO;
  
 # Valid import option
-my %VALID_IMPORT_OPTIONS = map {$_ => 1} qw(base mixins mixins_rename);
+my %VALID_IMPORT_OPTIONS = map {$_ => 1} qw(base mixins);
 
 # Import
 sub import {
@@ -38,9 +39,6 @@ sub import {
     # Regist mixin classes to meta information
     $Object::Simple::META->{$caller_class}{mixins} = $options{mixins};
     
-    # Regist methods which need rename to meta information
-    $Object::Simple::META->{$caller_class}{mixins_rename} = $options{mixins_rename};
-    
     # Adapt strict and warnings pragma to caller class
     strict->import;
     warnings->import;
@@ -61,14 +59,13 @@ sub unimport {
     my $caller_class = caller;
     
     # Delete MODIFY_CODE_ATTRIBUTES subroutine of caller class
-    no strict 'refs';
     delete ${$caller_class . '::'}{MODIFY_CODE_ATTRIBUTES};
 }
  
 # New
 sub new {
     my $invocant = shift;
-    
+
     # Convert to class name
     my $class = ref $invocant || $invocant;
     
@@ -86,8 +83,9 @@ sub new {
 }
  
 # Build class(create accessor, include mixin class, and create constructor)
+my %VALID_BUILD_CLASS_OPTIONS = map {$_ => 1} qw(all);
 sub build_class {
-    my $self = shift;
+    my ($self, %options) = @_;
     
     # Attribute names
     my $attr_names = {};
@@ -95,10 +93,14 @@ sub build_class {
     # Accessor code
     my $accessor_code = '';
     
-    # Alias code
-    my $alias_code = '';
-    
-    my $caller = caller;
+    # Get caller class
+    my $caller_class = caller;
+
+    # check build_class options
+    foreach my $key (keys %options) {
+        Carp::croak("'$key' is invalid build_class option ($caller_class)")
+            unless $VALID_BUILD_CLASS_OPTIONS{$key};
+    }
     
     # Parse symbol table and create accessors code
     while (my $class_and_ref = shift @Object::Simple::ATTRIBUTES_INFO) {
@@ -110,7 +112,6 @@ sub build_class {
         
             $attr_names->{$class} = {};
             
-            no strict 'refs';
             foreach my $sym (values %{"${class}::"}) {
             
                 next unless ref(*{$sym}{CODE}) eq 'CODE';
@@ -131,34 +132,34 @@ sub build_class {
         # Resist accessor option to meta imformation
         $Object::Simple::META->{$class}{attr_options}{$attr} = $attr_options;
         
-        # Create alias source code if accessor option contain 'alias'
-        if (my $alias = $attr_options->{alias}) {
-            Carp::croak("Cannot alias ${$class}::$attr to $alias,because ${class}::$attr is not defined")
-                unless defined &{"${class}::$attr"};
-            $alias_code .= qq/*${class}::$attr= \\&${class}::$alias\n/;
-        }
-        
         # Create accessor source code
-        else{
-            $accessor_code .= Object::Simple::Functions::create_accessor($class, $attr);
-        }
+        $accessor_code .= Object::Simple::Functions::create_accessor($class, $attr);
     }
     
-    # Join alias source code to accessor source code
-    $accessor_code .= $alias_code;
-    
-    # Create accessor and alias
+    # Create accessor
     if($accessor_code){
         no warnings qw(redefine);
         eval $accessor_code;
         Carp::croak("$accessor_code\n:$@") if $@;
     }
-        # Inherit base class and Object::Simple
     
-    my @build_need_classes = @Object::Simple::BUILD_NEED_CLASSES;
-    @Object::Simple::BUILD_NEED_CLASSES = ();
+    # Inherit base class and Object::Simple
+    my @build_need_classes;
+    if ($options{all}) {
+        @build_need_classes = @Object::Simple::BUILD_NEED_CLASSES;
+        @Object::Simple::BUILD_NEED_CLASSES = ();
+    }
+    else{
+        if(!@Object::Simple::BUILD_NEED_CLASSES ||
+           $Object::Simple::BUILD_NEED_CLASSES[-1] ne $caller_class)
+        {
+            return 1;
+        }
+        
+        @build_need_classes = ($caller_class);
+        pop @Object::Simple::BUILD_NEED_CLASSES;
+    }
     
-    no strict 'refs';
     foreach my $class (@build_need_classes) {
         # Initialize attr_options if it is not set
         $Object::Simple::META->{$class}{attr_options} = {}
@@ -168,7 +169,6 @@ sub build_class {
         if( my $base_class = $Object::Simple::META->{$class}{base}) {
             @{"${class}::ISA"} = ();
             push @{"${class}::ISA"}, $base_class;
-            if($class eq 'T13') { $DB::single = 1 }
             Carp::croak("Base class '$base_class' is invalid class name ($class)")
                 if $base_class =~ /[^\w:]/;
             
@@ -188,6 +188,7 @@ sub build_class {
     # Create constructor
     foreach my $class (@build_need_classes) {
         my $constructor_code .= Object::Simple::Functions::create_constructor($class);
+        $Object::Simple::META->{$class}{constructor_code} = $constructor_code;
         $Object::Simple::META->{$class}{constructor} = eval $constructor_code;
         Carp::croak("$constructor_code\n:$@") if $@;
     }
@@ -204,7 +205,6 @@ sub get_leftmost_isa {
     # Sortcut
     return unless $class;
     
-    no strict 'refs';
     my $leftmost_parent = $class;
     push @leftmost_isa, $leftmost_parent;
     while( $leftmost_parent = ${"${leftmost_parent}::ISA"}[0] ) {
@@ -222,10 +222,6 @@ sub include_mixin_classes {
     my $mixin_classes = $Object::Simple::META->{$caller_class}{mixins};
     Carp::croak("mixins must be array reference ($caller_class)") unless ref $mixin_classes eq 'ARRAY';
     
-    # Check mixins_rename
-    my $mixins_rename = $Object::Simple::META->{$caller_class}{mixins_rename} || {};
-    Carp::croak("'mixins_rename' must be hash reference ($caller_class)") unless ref $mixins_rename eq 'HASH';
-    
     # Mixin class attr options
     my $mixins_attr_options = {};
     
@@ -233,7 +229,6 @@ sub include_mixin_classes {
     my $mixined_methods = {};
     
     # Include mixin classes
-    no strict 'refs';
     no warnings 'redefine';
     foreach my $mixin_class (@$mixin_classes) {
         Carp::croak("Mixin class '$mixin_class' is invalid class name ($caller_class)")
@@ -249,12 +244,10 @@ sub include_mixin_classes {
             next unless defined &{"${mixin_class}::$method"};
             next if $method eq 'new';
             
-            my $rename = $mixins_rename->{"${mixin_class}::$method"} || $method;
-            next if defined &{"${caller_class}::$rename"} && !$mixined_methods->{$rename};
+            next if defined &{"${caller_class}::$method"} && !$mixined_methods->{$method};
             
-            Carp::croak("rename '$rename' must be method_name") if $rename =~ /[^\w_]/;
-            *{"${caller_class}::$rename"} = \&{"${mixin_class}::$method"};
-            $mixined_methods->{$rename} = 1;
+            *{"${caller_class}::$method"} = \&{"${mixin_class}::$method"};
+            $mixined_methods->{$method} = 1;
         }
         
         # Merge mixin class attr options
@@ -314,8 +307,20 @@ sub create_constructor {
                 qq/                                     {\@_, undef};\n/ .
                 qq/    bless \$self, \$class;\n/;
     
+    # Attribute which have trigger option
+    my @attrs_having_trigger;
+    
+    # Attribute which have traslate option
+    my @attrs_having_translate;
+    
     # Customize initialization
     foreach my $attr (keys %$attr_options) {
+        
+        # regist attribute which have traslate option
+        if ($attr_options->{$attr}{translate}) {
+            push @attrs_having_translate, $attr;
+            next;
+        }
         
         # Convert option
         if ($attr_options->{$attr}{convert}) {
@@ -332,12 +337,6 @@ sub create_constructor {
                 qq/    require $convert;\n/ .
                 qq/    \$self->{$attr} = $convert->new(\$self->{$attr}) if defined \$self->{$attr} && !Scalar::Util::blessed(\$self->{$attr});\n/;
             }
-        }
-        
-        # Trigger
-        if ($attr_options->{$attr}{trigger}) {
-            $code .=
-                qq/    \$Object::Simple::META->{'$class'}{merged_attr_options}{'$attr'}{trigger}->(\$self) if exists \$self->{'$attr'};\n/;
         }
         
         # Default option
@@ -361,6 +360,22 @@ sub create_constructor {
             $code .=
                 qq/    Scalar::Util::weaken(\$self->{'$attr'}) if ref \$self->{$attr};\n/;
         }
+        
+        # Regist attribute which have trigger option
+        push @attrs_having_trigger, $attr
+            if $attr_options->{$attr}{trigger};
+    }
+    
+    # Trigger option
+    foreach my $attr (@attrs_having_trigger) {
+        $code .=
+            qq/    \$Object::Simple::META->{'$class'}{merged_attr_options}{'$attr'}{trigger}->(\$self, \$self->{'$attr'}) if exists \$self->{'$attr'};\n/;
+    }
+    
+    # Translate option
+    foreach my $attr (@attrs_having_translate) {
+        $code .=
+            qq/    \$self->$attr(delete \$self->{'$attr'}) if exists \$self->{'$attr'};\n/;
     }
     
     # Return
@@ -377,10 +392,13 @@ sub create_accessor {
     my ($class, $attr) = @_;
     
     # Get accessor options
-    my ($auto_build, $read_only, $chained, $weak, $type, $convert, $deref, $trigger)
+    my ($auto_build, $read_only, $chained, $weak, $type, $convert, $deref, $trigger, $translate)
       = @{$Object::Simple::META->{$class}{attr_options}{$attr}}{
-            qw/auto_build read_only chained weak type convert deref trigger/
+            qw/auto_build read_only chained weak type convert deref trigger translate/
         };
+    
+    # create translate accessor
+    return Object::Simple::Functions::create_translate_accessor($class, $attr) if $translate;
     
     # Passed value expression
     my $value = '$_[1]';
@@ -477,20 +495,20 @@ sub create_accessor {
                 qq/        \$_[0]->{'$attr'} = $value;\n/;
         }
         
+        # Weaken
+        if ($weak) {
+            require Scalar::Util;
+            $code .=
+                qq/        Scalar::Util::weaken(\$_[0]->{'$attr'}) if ref \$_[0]->{$attr};\n/;
+        }
+
         # Trigger
         if ($trigger) {
             Carp::croak("'trigger' option must be code reference (${class}::$attr)")
                 unless ref $trigger eq 'CODE';
             
             $code .=
-                qq/\$Object::Simple::META->{'$class'}{attr_options}{'$attr'}{trigger}->(\$_[0]);\n/;
-        }
-                
-        # Weaken
-        if ($weak) {
-            require Scalar::Util;
-            $code .=
-                qq/        Scalar::Util::weaken(\$_[0]->{'$attr'}) if ref \$_[0]->{$attr};\n/;
+                qq/\$Object::Simple::META->{'$class'}{attr_options}{'$attr'}{trigger}->(\$_[0], $value);\n/;
         }
         
         # Return value or instance for chained/weak
@@ -527,9 +545,27 @@ sub create_accessor {
     return $code;
 }
 
+sub create_translate_accessor {
+    my ($class, $attr) = @_;
+    my $translate = $Object::Simple::META->{$class}{attr_options}{$attr}{translate};
+    
+    Carp::croak("'$translate' is invalid.'translate' option must be like 'method1->method2'")
+        unless $translate =~ /^(([a-zA-Z_][\w_]*)->)+([a-zA-Z_][\w_]*)$/;
+    
+    my $code =  qq/sub ${class}::$attr {\n/ .
+                qq/    my \$self = shift;\n/ .
+                qq/    if (\@_) {\n/ .
+                qq/        \$self->$translate(\@_);\n/ .
+                qq/    }\n/ .
+                qq/    return \$self->$translate;\n/ .
+                qq/}\n/;
+                
+    return $code;
+}
+
 # Valid accessor options
 my %VALID_ATTR_OPTIOTNS 
-    = map {$_ => 1} qw(default chained weak read_only auto_build type convert deref alias trigger);
+    = map {$_ => 1} qw(default chained weak read_only auto_build type convert deref trigger translate);
  
 # Check accessor options
 sub check_accessor_option {
@@ -545,19 +581,16 @@ sub check_accessor_option {
 sub define_MODIFY_CODE_ATTRIBUTES {
     my $class = shift;
     
-    my $code = sub {
-        my ($class, $ref, @attrs) = @_;
-        if($attrs[0] eq 'Attr') {
-            push(@Object::Simple::ATTRIBUTES_INFO, [$class, $ref ]);
-        }
-        else {
-            Carp::croak("'$attrs[0]' is bad. attribute must be 'Attr'");
-        }
+    *{"${class}::MODIFY_CODE_ATTRIBUTES"} = sub {
+        my ($class, $code_ref, $attr) = @_;
+        
+        Carp::croak("'$attr' is bad. attribute must be 'Attr'")
+            unless $attr eq 'Attr';
+        
+        push(@Object::Simple::ATTRIBUTES_INFO, [$class, $code_ref ]);
+        
         return;
     };
-    
-    no strict 'refs';
-    *{"${class}::MODIFY_CODE_ATTRIBUTES"} = $code;
 }
  
 =head1 NAME
@@ -566,7 +599,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0005
+Version 2.0006
  
 =head1 FEATURES
  
@@ -780,13 +813,6 @@ You can derefference returned value.You must specify it with 'type' option.
     my @authors = $book->authors;
     my %country_id = $book->country_id;
     
-=head2 alias
-
-You can create alias of attribute.
-
-    sub title          : Attr {}
-    sub alias_of_title : Attr { alias => 'title' }
-
 =head2 trigger
 
 You can defined trigger function when value is set.
