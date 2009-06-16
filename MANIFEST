@@ -44,7 +44,15 @@ t/02-core/T23.pm
 t/02-mixins.t
 t/02-mixins/B1.pm
 t/02-mixins/B2.pm
+t/02-mixins/B3.pm
 t/02-mixins/M1.pm
+t/02-mixins/M10.pm
+t/02-mixins/M11.pm
+t/02-mixins/M12.pm
+t/02-mixins/M13.pm
+t/02-mixins/M14.pm
+t/02-mixins/M15.pm
+t/02-mixins/M16.pm
 t/02-mixins/M2.pm
 t/02-mixins/M3.pm
 t/02-mixins/M4.pm
@@ -54,7 +62,9 @@ t/02-mixins/M8.pm
 t/02-mixins/M9.pm
 t/02-mixins/T1.pm
 t/02-mixins/T11.pm
+t/02-mixins/T12.pm
 t/02-mixins/T13.pm
+t/02-mixins/T14.pm
 t/02-mixins/T2.pm
 t/02-mixins/T3.pm
 t/02-mixins/T4.pm

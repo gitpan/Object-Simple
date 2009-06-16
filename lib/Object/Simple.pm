@@ -6,7 +6,7 @@ use warnings;
  
 require Carp;
  
-our $VERSION = '2.0006';
+our $VERSION = '2.0007';
 
 # Meta imformation
 our $META = {};
@@ -189,12 +189,42 @@ sub build_class {
     foreach my $class (@build_need_classes) {
         my $constructor_code .= Object::Simple::Functions::create_constructor($class);
         $Object::Simple::META->{$class}{constructor_code} = $constructor_code;
-        $Object::Simple::META->{$class}{constructor} = eval $constructor_code;
+        eval $constructor_code;
         Carp::croak("$constructor_code\n:$@") if $@;
+        $Object::Simple::META->{$class}{constructor} = \&{"Object::Simple::Constructor::${class}::new"}
     }
     return 1;
 }
- 
+
+sub DESTROY {}
+
+sub AUTOLOAD {
+    our $AUTOLOAD;
+    my $self = $_[0];
+    my $caller_class = caller;
+    my $method = $AUTOLOAD;
+    $method =~ s/^.*:://;
+    
+    if($method =~ /^MIXINS_(.+)/) {
+        $method = $1;
+        my $code =
+                qq/sub Object::Simple::MIXINS_$method {\n/ .
+                qq/    my \$self = shift;\n/ .
+                qq/    my \$caller_class = caller;\n/ .
+                qq/    my \$mixin_classes = \$Object::Simple::META->{\$caller_class}{mixins};\n/ .
+                qq/    return unless \$mixin_classes;\n/ .
+                qq/    foreach my \$mixin_class (\@\$mixin_classes) {\n/ .
+                qq/        my \$full_qualified_method = "\${mixin_class}::$method";\n/ .
+                qq/        \$self->\$full_qualified_method(\@_);\n/ .
+                qq/    }\n/ .
+                qq/}\n/;
+                
+        eval "$code";
+        Carp::croak("$code\n$@") if $@;
+        goto &{"Object::Simple::MIXINS_$method"};
+    }
+}
+
 package Object::Simple::Functions;
 
 # Get leftmost self and parent classes
@@ -242,7 +272,6 @@ sub include_mixin_classes {
         # Import all methods
         foreach my $method ( keys %{"${mixin_class}::"} ) {
             next unless defined &{"${mixin_class}::$method"};
-            next if $method eq 'new';
             
             next if defined &{"${caller_class}::$method"} && !$mixined_methods->{$method};
             
@@ -300,7 +329,7 @@ sub create_constructor {
     my $attr_options = merge_self_and_super_accessor_option($class);
     
     # Create instance
-    my $code =  qq/sub {\n/ .
+    my $code =  qq/sub Object::Simple::Constructor::${class}::new {\n/ .
                 qq/    my \$class = shift;\n/ .
                 qq/    my \$self = !(\@_ % 2)           ? {\@_}       :\n/ .
                 qq/               ref \$_[0] eq 'HASH' ? {\%{\$_[0]}} :\n/ .
@@ -599,7 +628,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0006
+Version 2.0007
  
 =head1 FEATURES
  
@@ -820,6 +849,14 @@ You can defined trigger function when value is set.
 sub error : Attr { trigger => sub{ $_[0]->stete('error') } }
 sub state : Attr {}
 
+=head2 translate
+
+You create shortcut of attribute
+    
+    sub person : Attr { default => sub{ Person->new } }
+    sub name   : Attr { translate => 'person->name' }
+    sub age    : Attr { translate => 'person->age' }
+
 =head1 INHERITANCE
  
     # Inheritance
@@ -841,15 +878,6 @@ Object::Simple support mixin syntax
         ]
     );
  
-All methods is imported to Book.If a same named methods is exist, the method is overwrited by mixin method.
-
-You can rename method if methods name crash.
- 
-    use Object::Simple( 
-        mixins => [ 'Some::Mixin' ]
-        mixins_rename => { 'Somo::Mixin::mehtod' => 'renamed_method' }
-    );
-
 Object::Simple mixin merge mixin class attribute.
     
     # mixin class
@@ -895,6 +923,19 @@ If method names is crashed, method search order is the following
                      |     +--------------+
                      +---2 | Mixin class2 |
                            +--------------+
+
+=head1 CALL MIXINS METHODS
+
+You can call mixins methods.
+
+You use this to initialize or destruct object;
+
+    $self->MIXINS_initialize; # initialize mehtods of mixin classes is called
+    
+    $self->MIXINS_DESTROY;    # DESTROY methods of mixin classes is called
+
+    $self->MIXINS_method;     # any method ok!
+
 
 =head1 using your MODIFY_CODE_ATTRIBUTES subroutine
  

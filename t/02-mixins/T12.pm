@@ -1,7 +1,7 @@
-package T13;
-use Object::Simple(base => 'T12', mixins => ['M12', 'M13', 'M14']);
+package T12;
+use Object::Simple(base => 'B3', mixins => ['M10', 'M11']);
 
-sub m5 : Attr {}
+sub m2 : Attr {}
 
 sub new {
     my $self = shift->Object::Simple::new(@_);
@@ -13,8 +13,10 @@ sub initialize {
     my $self = shift;
     
     $self->SUPER::initialize;
-    $self->MIXINS_initialize;
-    $self->m5(5);
+    $self->MIXINS_initialize(3);
+    $self->m2(2);
 }
+
+
 
 Object::Simple->build_class;
