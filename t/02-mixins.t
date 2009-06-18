@@ -41,6 +41,7 @@ like($@, qr/\QMixin class '()()(' is invalid class name (T8)/, 'invalid mixin cl
 eval "use T9";
 like($@, qr/mixins must be array reference/, 'mixin must be array ref');
 
+# MIXINS_******
 {
     use T11;
     my $t = T11->new;
@@ -70,4 +71,31 @@ use T14;
     is_deeply($t, {m1 => 1, m2 => 2}, 'mixin double');
 }
 
+# UPPER_******
+use T15;
+{
+    my $t = T15->new;
+    $t->m1;
+    $t->M19;
+    is($t->M19, 1, 'UPPER_method mixin class 1');
+    
+    $t->m2;
+    is($t->M18, 1, 'UPPER_method mixin class 2');
+    
+    $t->m3;
+    is($t->B4, 1, 'UPPER_method base class 1');
+    
+    $t->m4;
+    is($t->B5, 1, 'UPPER_method base class 2');
+    
+    is($t->m5, 5, 'UPPER_method Object::Simple');
+    
+    eval{ $t->m6 };
+    like($@, qr/Cannot locate method "m6" via base class of T15/, 'UPPER_method no exist');
+    
+    eval{ $t->m7 };
+    like($@, qr/Cannot locate method "m7" via T15/, 'm7 is undefined');
+}
+
+__END__
 

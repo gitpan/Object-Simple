@@ -6,7 +6,7 @@ use warnings;
  
 require Carp;
  
-our $VERSION = '2.0008';
+our $VERSION = '2.0009';
 
 # Meta imformation
 our $META = {};
@@ -104,7 +104,6 @@ sub build_class {
     
     # Parse symbol table and create accessors code
     while (my $class_and_ref = shift @Object::Simple::ATTRIBUTES_INFO) {
-        
         my ($class, $ref) = @$class_and_ref;
         
         # Parse symbol tabel to find code reference correspond to method names
@@ -150,14 +149,10 @@ sub build_class {
         @Object::Simple::BUILD_NEED_CLASSES = ();
     }
     else{
-        if(!@Object::Simple::BUILD_NEED_CLASSES ||
-           $Object::Simple::BUILD_NEED_CLASSES[-1] ne $caller_class)
-        {
-            return 1;
-        }
+        return 1 if !@Object::Simple::BUILD_NEED_CLASSES ||
+                    $Object::Simple::BUILD_NEED_CLASSES[-1] ne $caller_class;
         
-        @build_need_classes = ($caller_class);
-        pop @Object::Simple::BUILD_NEED_CLASSES;
+        @build_need_classes = (pop @Object::Simple::BUILD_NEED_CLASSES);
     }
     
     foreach my $class (@build_need_classes) {
@@ -223,6 +218,35 @@ sub AUTOLOAD {
         Carp::croak("$code\n$@") if $@;
         goto &{"Object::Simple::MIXINS_$method"};
     }
+    elsif($method =~ /^UPPER_(.+)/) {
+        $method = $1;
+        my $code =
+                qq/sub Object::Simple::UPPER_$method {\n/ .
+                qq/    my \$self = shift;\n/ .
+                qq/    my \$caller_class = caller;\n/ .
+                qq/    my \$mixin_classes = \$Object::Simple::META->{\$caller_class}{mixins} || [];\n/ .
+                qq/    foreach my \$mixin_class (reverse \@\$mixin_classes) {\n/ .
+                qq/        my \$full_qualified_method = "\${mixin_class}::$method";\n/ .
+                qq/        return &{"\$full_qualified_method"}(\$self, \@_) if defined &{"\$full_qualified_method"};\n/ .
+                qq/    }\n/ .
+                qq/\n/ .
+                qq/    my \$base_class = \$caller_class;\n/ .
+                qq/    while(\$base_class = \${"\${base_class}::ISA"}[0] ) {;\n/ .
+                qq/        my \$full_qualified_method = "\${base_class}::$method";\n/ .
+                qq/        return &{"\$full_qualified_method"}(\$self, \@_) if defined &{"\$full_qualified_method"};\n/ .
+                qq/    }\n/ .
+                qq/    return  Object::Simple::$method(\$self, \@_) if defined &Object::Simple::$method;\n/ .
+                qq/    Carp::croak("Cannot locate method \\"$method\\" via base class of \$caller_class");\n/ .
+                qq/}\n/;
+                
+        eval "$code";
+        Carp::croak("$code\n$@") if $@;
+        goto &{"Object::Simple::UPPER_$method"};
+    }
+    else {
+        my $class = ref $self || $self;
+        Carp::croak("Cannot locate method \"$method\" via $class");
+    }
 }
 
 package Object::Simple::Functions;
@@ -255,12 +279,9 @@ sub include_mixin_classes {
     # Mixin class attr options
     my $mixins_attr_options = {};
     
-    # Method mixined to caller class
-    my $mixined_methods = {};
-    
     # Include mixin classes
     no warnings 'redefine';
-    foreach my $mixin_class (@$mixin_classes) {
+    foreach my $mixin_class (reverse @$mixin_classes) {
         Carp::croak("Mixin class '$mixin_class' is invalid class name ($caller_class)")
             if $mixin_class =~ /[^\w:]/;
         
@@ -272,27 +293,20 @@ sub include_mixin_classes {
         # Import all methods
         foreach my $method ( keys %{"${mixin_class}::"} ) {
             next unless defined &{"${mixin_class}::$method"};
-            
-            next if defined &{"${caller_class}::$method"} && !$mixined_methods->{$method};
+            next if defined &{"${caller_class}::$method"};
             
             *{"${caller_class}::$method"} = \&{"${mixin_class}::$method"};
-            $mixined_methods->{$method} = 1;
-        }
-        
-        # Merge mixin class attr options
-        if($Object::Simple::META->{$mixin_class}{attr_options}) {
-            $mixins_attr_options = {
-                %{$mixins_attr_options}, 
-                %{$Object::Simple::META->{$mixin_class}{attr_options}}
-            }
         }
     }
     
     # Merge mixin class attr options to caller class
-    $Object::Simple::META->{$caller_class}{attr_options} = {
-        %{$mixins_attr_options},
-        %{$Object::Simple::META->{$caller_class}{attr_options}}
+    my %attr_options;
+    foreach my $class (@$mixin_classes, $caller_class) {
+        %attr_options = ( %attr_options, %{$Object::Simple::META->{$class}{attr_options}})
+            if $Object::Simple::META->{$class}{attr_options};
     }
+    
+    $Object::Simple::META->{$caller_class}{attr_options} = \%attr_options;
 }
  
 # Merge self and super accessor option
@@ -628,7 +642,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0008
+Version 2.0009
  
 =head1 FEATURES
  
@@ -747,7 +761,46 @@ resist attribute and create accessors.
 Script must build_class 'Object::Simple->build_class;'
  
     Object::Simple->build_class; # End of Object::Simple!
- 
+
+=head2 MIXINS_******
+
+You can call all methods of mixin classes by using MIXINS_******.
+
+For example, you can call all initialize methods of mixin classes by using MIXINS_initialize
+    package ThisClass;
+    Object::Simple(mixins => ['MixinClass1', 'MixinClass2']);
+    
+    sub initialize {
+        my $self = shift;
+        
+        # call initialize of all mixin class
+        $self->MIXINS_initialize;
+    }
+    
+MixinClass1::initialize and MixinClass2::initialize is called.
+
+=head2 UPPER_******
+
+This method search method by the following order and call the method.
+
+1. Mixin class2
+
+2. Mixin class1
+
+3. Base class
+
+    package ThisClass;
+    Object::Simple(base => 'BaseClass', mixins => ['MixinClass1', 'MixinClass2']);
+
+    sub run {
+        my $self = shift;
+        $self->UPPER_run;
+    }
+
+If MixinClass1 have run methods, MixinClass1::run is called.
+
+If MIxinClass1 and MixinClass2 have run method, MixinClass2::run is called.
+
 =head1 ACCESSOR OPTIONS
  
 =head2 default
@@ -910,19 +963,29 @@ If method names is crashed, method search order is the following
 
 3. Mixin class1
 
-4. Thit class
+4. Base class
 
-     +------------+
-   4 | Base class |
-     +------------+
+     +--------------+
+   4 | Base class   |
+     +--------------+
            |
-     +------------+        +--------------+
-   1 | This class |--+---3 | Mixin class1 |
-     +------------+  |     +--------------+
-                     |
-                     |     +--------------+
-                     +---2 | Mixin class2 |
-                           +--------------+
+     +--------------+
+   3 | Mixin class1 |
+     +--------------+
+           |
+     +--------------+
+   2 | Mixin class2 |
+     +--------------+
+           |
+     +--------------+
+   1 | This class   |
+     +--------------+
+
+    #       1
+    package ThisClass;
+    #                       4                       3              2
+    Object::Simple(base => 'BaseClass', mixins => ['MixinClass1', 'MixinClass2']);
+
 
 =head1 CALL MIXINS METHODS
 
