@@ -8,10 +8,7 @@ WriteMakefile
           'VERSION_FROM' => 'lib/Object/Simple.pm',
           'PREREQ_PM' => {
                            'Test::More' => 0,
-                           'Scalar::Util' => '1.14',
-                           'Object::Simple::Error' => '0.0201',
-                           'Storable' => 0,
-                           'Object::Simple::Constraint' => '0.0201'
+                           'Scalar::Util' => '1.14'
                          }
         )
 ;

@@ -1,6 +1,6 @@
 ---
 name: Object-Simple
-version: 2.0009
+version: 2.0010
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
 abstract: Light Weight Minimal Object System
@@ -8,16 +8,13 @@ license: perl
 resources:
   license: ~
 requires:
-  Object::Simple::Constraint: 0.0201
-  Object::Simple::Error: 0.0201
   Scalar::Util: 1.14
-  Storable: 0
 build_requires:
   Test::More: 0
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 2.0009
+    version: 2.0010
   Object::Simple::Functions:
     file: lib/Object/Simple.pm
 generated_by: Module::Build version 0.31012
