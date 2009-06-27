@@ -78,6 +78,7 @@ t/02-mixins/T5.pm
 t/02-mixins/T6.pm
 t/02-mixins/T8.pm
 t/02-mixins/T9.pm
+t/03-core.t
 t/03-extend1.t
 t/03-extend1/Book.pm
 t/03-extend1/PBook.pm
