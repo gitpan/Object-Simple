@@ -1,6 +1,6 @@
 ---
 name: Object-Simple
-version: 2.0013
+version: 2.0014
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
 abstract: Light Weight Minimal Object System
@@ -14,7 +14,7 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 2.0013
+    version: 2.0014
   Object::Simple::Functions:
     file: lib/Object/Simple.pm
   Object::Simple::MIXINS:
