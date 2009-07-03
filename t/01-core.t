@@ -54,13 +54,6 @@ use Book;
     ok($@, 'set from class');
 }
  
-# setter return value
-{
-    my $book = Book->new;
-    my $current_default = $book->author( 'p' );
-    is( $current_default, 'p', 'return current value( default ) in case setter is called' );
-}
- 
 {
     my $t = Book->new( price => 6 );
     my $c = $t->new;
@@ -218,6 +211,9 @@ like($@, qr/'A' is bad. attribute must be 'Attr'/, 'bat attribute name');
     is($r2, $t, 'weak and chained set value ret');
     is_deeply($t->m2, $d2, 'weak and chained set value');
     
+    is($t->m3(1), $t, 'defaut is chained');
+    
+    is($t->m4(1), 1, 'chained => 0');
 }
  
 {
