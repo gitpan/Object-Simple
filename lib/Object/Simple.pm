@@ -5,7 +5,7 @@ use warnings;
  
 require Carp;
  
-our $VERSION = '2.0016';
+our $VERSION = '2.0017';
 
 # Meta imformation
 our $META = {};
@@ -619,8 +619,9 @@ sub create_translate_accessor {
                 qq/    my \$self = shift;\n/ .
                 qq/    if (\@_) {\n/ .
                 qq/        \$self->$translate(\@_);\n/ .
+                qq/        return \$self;\n/ .
                 qq/    }\n/ .
-                qq/    return \$self->$translate;\n/ .
+                qq/    return wantarray ? (\$self->$translate) : \$self->$translate;\n/ .
                 qq/}\n/;
                 
     return $code;
@@ -666,7 +667,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0016
+Version 2.0017
  
 =head1 FEATURES
  

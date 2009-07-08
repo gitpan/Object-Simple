@@ -1,4 +1,4 @@
-use Test::More  'no_plan';
+use Test::More tests => 118;
 use strict;
 use warnings;
  
@@ -465,6 +465,38 @@ use T30;
     $t->m3(1);
     is($t->m4->m2->m1, 1, 'translate set value multipule');
     is($t->m3, 1, 'translate get value multipule');
+}
+
+{
+    my $t = T30->new;
+    my $r = $t->m5(1);
+    is($r, $t, 'translate setter return chained');
+}
+
+{
+    my $t = T30->new;
+    my $r = $t->m6(1);
+    is($r, $t, 'translate setter return chained though not chained');
+}
+
+{
+    my $t = T30->new;
+    $t->m7(1, 2);
+    my $r = $t->m7;
+    is_deeply($r, [1, 2], 'translate getter return scalar context value array');
+    
+    my @r = $t->m7;
+    is_deeply([@r], [1, 2], 'translate getter return list context value array');
+}
+
+{
+    my $t = T30->new;
+    $t->m8(k => 1);
+    my $r = $t->m8;
+    is_deeply($r, {k => 1}, 'translate getter return scalar context value hash');
+    
+    my %r = $t->m8;
+    is_deeply({%r}, {k => 1}, 'translate getter return list context value hash');
 }
 
 {
