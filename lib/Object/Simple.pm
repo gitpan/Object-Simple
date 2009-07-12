@@ -5,7 +5,7 @@ use warnings;
  
 require Carp;
  
-our $VERSION = '2.0017';
+our $VERSION = '2.0018';
 
 # Meta imformation
 our $META = {};
@@ -109,7 +109,7 @@ sub build_class {
     
     # Parse symbol table and create accessors code
     while (my $class_and_ref = shift @Object::Simple::ATTRIBUTES_INFO) {
-        my ($class, $ref) = @$class_and_ref;
+        my ($class, $ref, $code_attr) = @$class_and_ref;
         
         # Parse symbol tabel to find code reference correspond to method names
         unless($attr_names->{$class}) {
@@ -131,14 +131,23 @@ sub build_class {
         # Get attr options
         my $attr_options = {$ref->()};
         
-        # Check accessor option
-        Object::Simple::Functions::check_accessor_option($attr, $class, $attr_options);
+        # Is this accessor class accessor
+        my $is_class_accessor = $code_attr eq 'ClassAttr' ? 1 : 0;
         
-        # Resist accessor option to meta imformation
-        $Object::Simple::META->{$class}{attr_options}{$attr} = $attr_options;
+        # Check accessor option
+        Object::Simple::Functions::check_accessor_option($attr, $class, $attr_options, $is_class_accessor);
+        
+        if ($is_class_accessor) {
+            # Resist accessor option to meta imformation
+            $Object::Simple::META->{$class}{class_attr_options}{$attr} = $attr_options;
+        }
+        else {
+            # Resist accessor option to meta imformation
+            $Object::Simple::META->{$class}{attr_options}{$attr} = $attr_options;
+        }
         
         # Create accessor source code
-        $accessor_code .= Object::Simple::Functions::create_accessor($class, $attr);
+        $accessor_code .= Object::Simple::Functions::create_accessor($class, $attr, $is_class_accessor);
     }
     
     # Create accessor
@@ -358,7 +367,8 @@ sub create_constructor {
     my $attr_options = merge_self_and_super_accessor_option($class);
     
     # Create instance
-    my $code =  qq/sub Object::Simple::Constructor::${class}::new {\n/ .
+    my $code =  qq/package Object::Simple::Constructor::${class};\n/ .
+                qq/sub new {\n/ .
                 qq/    my \$class = shift;\n/ .
                 qq/    my \$self = !(\@_ % 2)           ? {\@_}       :\n/ .
                 qq/               ref \$_[0] eq 'HASH' ? {\%{\$_[0]}} :\n/ .
@@ -447,24 +457,26 @@ my %VALID_TYPE = map {$_ => 1} qw/array hash/;
 # Create accessor.
 sub create_accessor {
     
-    my ($class, $attr) = @_;
+    my ($class, $attr, $is_class_accessor) = @_;
+    
+    my $attr_options = $is_class_accessor ? 'class_attr_options' : 'attr_options';
     
     # Get accessor options
     my ($auto_build, $read_only, $weak, $type, $convert, $deref, $trigger, $translate)
-      = @{$Object::Simple::META->{$class}{attr_options}{$attr}}{
+      = @{$Object::Simple::META->{$class}{$attr_options}{$attr}}{
             qw/auto_build read_only weak type convert deref trigger translate/
         };
     
     # chained
-    my $chained =   exists $Object::Simple::META->{$class}{attr_options}{$attr}{chained}
-                  ? $Object::Simple::META->{$class}{attr_options}{$attr}{chained}
+    my $chained =   exists $Object::Simple::META->{$class}{$attr_options}{$attr}{chained}
+                  ? $Object::Simple::META->{$class}{$attr_options}{$attr}{chained}
                   : 1;
     
     # create translate accessor
     return Object::Simple::Functions::create_translate_accessor($class, $attr) if $translate;
     
     # Passed value expression
-    my $value = '$_[1]';
+    my $value = '$_[0]';
     
     # Check type
     Carp::croak("'type' option must be 'array' or 'hash' (${class}::$attr)")
@@ -475,20 +487,35 @@ sub create_accessor {
         if $deref && !$type;
     
     # Beginning of accessor source code
-    my $code =  qq/sub ${class}::$attr {\n/;
+    my $code =  qq/package $class;\n/ .
+                qq/sub $attr {\n/ .
+                qq/    my \$self = shift;\n/;
+    
+    # Variable to strage
+    my $strage;
+    if ($is_class_accessor) {
+        # Strage package Varialbe in case class accessor
+        $strage = "\$Object::Simple::META->{\$self}{class_attr}{'$attr'}";
+        $code .=
+                qq/    Carp::croak("${class}::$attr must be called from class, not instance")\n/ .
+                qq/      if ref \$self;\n/;
+    }
+    else {
+        # Strage hash in case normal accessor
+        $strage = "\$self->{'$attr'}";
+    }
     
     # Create temporary variable if there is type or convert option
-    $code .=    qq/my \$value;\n/ if $type || $convert;
+    $code .=    qq/    my \$value;\n/ if $type || $convert;
     
     # Automatically call build method
     if($auto_build){
-        
         $code .=
-                qq/    if(\@_ == 1 && ! exists \$_[0]->{'$attr'}) {\n/;
+                qq/    if(\@_ == 0 && ! exists $strage) {\n/;
         
         if(ref $auto_build eq 'CODE') {
             $code .=
-                qq/        \$Object::Simple::META->{'$class'}{attr_options}{'$attr'}{auto_build}->(\$_[0]);\n/;
+                qq/        \$Object::Simple::META->{'$class'}{$attr_options}{'$attr'}{auto_build}->(\$self);\n/;
         }
         else {
             my $build_method;
@@ -497,7 +524,7 @@ sub create_accessor {
             }
             
             $code .=
-                qq/        \$_[0]->$build_method\n;/;
+                qq/        \$self->$build_method;\n/;
         }
         
         $code .=
@@ -507,7 +534,7 @@ sub create_accessor {
     # Read only accesor
     if ($read_only){
         $code .=
-                qq/    if(\@_ > 1) {\n/ .
+                qq/    if(\@_ > 0) {\n/ .
                 qq/        Carp::croak("${class}::$attr is read only")\n/ .
                 qq/    }\n/;
     }
@@ -515,17 +542,17 @@ sub create_accessor {
     # Read and write accessor
     else {
         $code .=
-                qq/    if(\@_ > 1) {\n/;
+                qq/    if(\@_ > 0) {\n/;
         
         # Variable type
         if($type) {
             if($type eq 'array') {
                 $code .=
-                qq/    \$value = ref \$_[1] eq 'ARRAY' ? \$_[1] : !defined \$_[1] ? undef : [\@_[1 .. \$#_]];\n/;
+                qq/        \$value = ref \$_[0] eq 'ARRAY' ? \$_[0] : !defined \$_[0] ? undef : [\@_];\n/;
             }
             else {
                 $code .=
-                qq/    \$value = ref \$_[1] eq 'HASH' ? \$_[1] : !defined \$_[1] ? undef : {\@_[1 .. \$#_]};\n/;
+                qq/        \$value = ref \$_[0] eq 'HASH' ? \$_[0] : !defined \$_[0] ? undef : {\@_};\n/;
             }
             $value = '$value';
         }
@@ -534,7 +561,7 @@ sub create_accessor {
         if ($convert) {
             if(ref $convert eq 'CODE') {
                 $code .=
-                qq/        \$value = \$Object::Simple::META->{'$class'}{attr_options}{'$attr'}{convert}->($value);\n/;
+                qq/        \$value = \$Object::Simple::META->{'$class'}{$attr_options}{'$attr'}{convert}->($value);\n/;
             }
             else {
                 require Scalar::Util;
@@ -549,20 +576,20 @@ sub create_accessor {
         # Store argument optimized
         if (!$weak && !$chained && !$trigger) {
             $code .=
-                qq/        return \$_[0]->{'$attr'} = $value;\n/;
+                qq/        return $strage = $value;\n/;
         }
         
         # Store argument the old way
         else {
             $code .=
-                qq/        \$_[0]->{'$attr'} = $value;\n/;
+                qq/        $strage = $value;\n/;
         }
         
         # Weaken
         if ($weak) {
             require Scalar::Util;
             $code .=
-                qq/        Scalar::Util::weaken(\$_[0]->{'$attr'}) if ref \$_[0]->{$attr};\n/;
+                qq/        Scalar::Util::weaken($strage) if ref $strage;\n/;
         }
 
         # Trigger
@@ -571,13 +598,13 @@ sub create_accessor {
                 unless ref $trigger eq 'CODE';
             
             $code .=
-                qq/\$Object::Simple::META->{'$class'}{attr_options}{'$attr'}{trigger}->(\$_[0], $value);\n/;
+                qq/        \$Object::Simple::META->{'$class'}{$attr_options}{'$attr'}{trigger}->(\$self, $value);\n/;
         }
         
         # Return value or instance for chained/weak
         if ($chained) {
             $code .=
-                qq/        return \$_[0];\n/;
+                qq/        return \$self;\n/;
         }
         
         $code .=
@@ -588,18 +615,18 @@ sub create_accessor {
     if ($deref) {
         if ($type eq 'array') {
             $code .=
-                qq/    return wantarray ? \@{\$_[0]->{'$attr'}} : \$_[0]->{'$attr'};\n/;
+                qq/    return wantarray ? \@{$strage} : $strage;\n/;
         }
         else {
             $code .=
-                qq/    return wantarray ? \%{\$_[0]->{'$attr'}} : \$_[0]->{'$attr'};\n/;
+                qq/    return wantarray ? \%{$strage} : $strage;\n/;
         }
     }
     
     # No dereference
     else {
         $code .=
-                qq/    return \$_[0]->{'$attr'};\n/;
+                qq/    return $strage;\n/;
     }
     
     # End of accessor source code
@@ -615,7 +642,8 @@ sub create_translate_accessor {
     Carp::croak("'$translate' is invalid.'translate' option must be like 'method1->method2'")
         unless $translate =~ /^(([a-zA-Z_][\w_]*)->)+([a-zA-Z_][\w_]*)$/;
     
-    my $code =  qq/sub ${class}::$attr {\n/ .
+    my $code =  qq/package $class;\n/ .
+                qq/sub $attr {\n/ .
                 qq/    my \$self = shift;\n/ .
                 qq/    if (\@_) {\n/ .
                 qq/        \$self->$translate(\@_);\n/ .
@@ -633,11 +661,11 @@ my %VALID_ATTR_OPTIOTNS
  
 # Check accessor options
 sub check_accessor_option {
-    my ( $attr, $class, $attr_options ) = @_;
+    my ( $attr, $class, $attr_options, $is_class_accessor ) = @_;
     
     foreach my $key ( keys %$attr_options ){
         Carp::croak("${class}::$attr '$key' is invalid accessor option.")
-            unless $VALID_ATTR_OPTIOTNS{ $key };
+            if !$VALID_ATTR_OPTIOTNS{ $key } || ($is_class_accessor && $key eq 'default');
     }
 }
  
@@ -646,12 +674,12 @@ sub define_MODIFY_CODE_ATTRIBUTES {
     my $class = shift;
     
     my $code = sub {
-        my ($class, $code_ref, $attr) = @_;
+        my ($class, $code_ref, $code_attr) = @_;
         
-        Carp::croak("'$attr' is bad. attribute must be 'Attr'")
-            unless $attr eq 'Attr';
+        Carp::croak("'$code_attr' is bad. attribute must be 'Attr' or 'ClassAttr")
+            unless $code_attr eq 'Attr' || $code_attr eq 'ClassAttr';
         
-        push(@Object::Simple::ATTRIBUTES_INFO, [$class, $code_ref ]);
+        push(@Object::Simple::ATTRIBUTES_INFO, [$class, $code_ref, $code_attr ]);
         
         return;
     };
@@ -667,7 +695,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0017
+Version 2.0018
  
 =head1 FEATURES
  
@@ -756,7 +784,13 @@ writing new and accessors repeatedly.
             'Object::Simple::Mixin::AttrOptions'
         ]
     );
- 
+    
+    # class attribute accessor
+    sub options : ClassAttr {
+        type => 'array',
+        auto_build => sub { shift->options([]) }
+    }
+
 =cut
  
 =head1 METHODS
@@ -1058,7 +1092,23 @@ If you use your MODIFY_CODE_ATTRIBUTES subroutine, do 'no Object::Simple;'
     sub m2 : YourAttribute {}
     
     Object::Simple->build_class;
- 
+
+=head1 CLASS ATTRIBUTE ACCESSOR
+
+You can use class attribute accessor.
+
+    # class attribute accessor
+    sub options : ClassAttr {
+        type => 'array',
+        auto_build => sub { shift->options([]) }
+    }
+
+Class attribute belong to class, not object.
+
+all accessor options except 'default' is used.
+
+If you set default value to class attribute, you can use 'auto_build' option.
+
 =head1 AUTHOR
  
 Yuki Kimoto, C<< <kimoto.yuki at gmail.com> >>

@@ -36,6 +36,10 @@ t/01-core/T32.pm
 t/01-core/T33.pm
 t/01-core/T34.pm
 t/01-core/T35.pm
+t/01-core/T36.pm
+t/01-core/T37.pm
+t/01-core/T38.pm
+t/01-core/T39.pm
 t/01-core/T4.pm
 t/01-core/T6.pm
 t/01-core/T7.pm
