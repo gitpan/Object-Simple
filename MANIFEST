@@ -63,6 +63,10 @@ t/02-mixins/M17.pm
 t/02-mixins/M18.pm
 t/02-mixins/M19.pm
 t/02-mixins/M2.pm
+t/02-mixins/M20.pm
+t/02-mixins/M21.pm
+t/02-mixins/M22.pm
+t/02-mixins/M23.pm
 t/02-mixins/M3.pm
 t/02-mixins/M4.pm
 t/02-mixins/M5.pm
@@ -75,6 +79,8 @@ t/02-mixins/T12.pm
 t/02-mixins/T13.pm
 t/02-mixins/T14.pm
 t/02-mixins/T15.pm
+t/02-mixins/T16.pm
+t/02-mixins/T17.pm
 t/02-mixins/T2.pm
 t/02-mixins/T3.pm
 t/02-mixins/T4.pm
