@@ -5,7 +5,7 @@ use warnings;
  
 require Carp;
  
-our $VERSION = '2.0019';
+our $VERSION = '2.0020';
 
 # Meta imformation
 our $META = {};
@@ -214,32 +214,32 @@ sub AUTOLOAD {
     my $caller_class = caller;
     my $method = $AUTOLOAD;
     $method =~ s/^.*:://;
-    
-    my $code =
-            qq/sub Object::Simple::UPPER::$method {\n/ .
-            qq/    my \$self = shift;\n/ .
-            qq/    my \$caller_class = caller;\n/ .
-            qq/    my \$mixin_classes = \$Object::Simple::META->{\$caller_class}{mixins} || [];\n/ .
-            qq/    foreach my \$mixin_class (reverse \@\$mixin_classes) {\n/ .
-            qq/        my \$full_qualified_method = "\${mixin_class}::$method";\n/ .
-            qq/        no strict 'refs';\n/ .
-            qq/        return &{"\$full_qualified_method"}(\$self, \@_) if defined &{"\$full_qualified_method"};\n/ .
-            qq/    }\n/ .
-            qq/\n/ .
-            qq/    my \$base_class = \$caller_class;\n/ .
-            qq/    no strict 'refs';\n/ .
-            qq/    while(\$base_class = \${"\${base_class}::ISA"}[0] ) {;\n/ .
-            qq/        my \$full_qualified_method = "\${base_class}::$method";\n/ .
-            qq/        return &{"\$full_qualified_method"}(\$self, \@_) if defined &{"\$full_qualified_method"};\n/ .
-            qq/    }\n/ .
-            qq/    return  Object::Simple::$method(\$self, \@_) if defined &Object::Simple::$method;\n/ .
-            qq/    Carp::croak("Cannot locate method \\"$method\\" via base class of \$caller_class");\n/ .
-            qq/}\n/;
+
+    my $code = sub {
+        my $method = shift;
+        return sub {
+            my $self = shift;
+            my $caller_class = caller;
+            my $mixin_classes = $Object::Simple::META->{$caller_class}{mixins} || [];
+            foreach my $mixin_class (reverse @$mixin_classes) {
+                my $full_qualified_method = "${mixin_class}::$method";
+                no strict 'refs';
+                return &{"$full_qualified_method"}($self, @_) if defined &{"$full_qualified_method"};
+            }
+            my $base_class = $caller_class;
             
-    eval "$code";
-    Carp::croak("$code\n$@") if $@;
+            no strict 'refs';
+            while($base_class = ${"${base_class}::ISA"}[0] ) {
+                my $full_qualified_method = "${base_class}::$method";
+                return &{"$full_qualified_method"}($self, @_) if defined &{"$full_qualified_method"};
+            }
+            return &{"Object::Simple::$method"}($self, @_) if defined &{"Object::Simple::$method"};
+            Carp::croak("Cannot locate method '$method' via base class of $caller_class");
+        }
+    };
     
     no strict 'refs';
+    *{"Object::Simple::UPPER::$method"} = $code->($method);
     goto &{"Object::Simple::UPPER::$method"};
 }
 
@@ -251,23 +251,23 @@ sub AUTOLOAD {
     my $method = $AUTOLOAD;
     $method =~ s/^.*:://;
     
-    my $code =
-            qq/sub Object::Simple::MIXINS::$method {\n/ .
-            qq/    my \$self = shift;\n/ .
-            qq/    my \$caller_class = caller;\n/ .
-            qq/    my \$mixin_classes = \$Object::Simple::META->{\$caller_class}{mixins};\n/ .
-            qq/    return unless \$mixin_classes;\n/ .
-            qq/    foreach my \$mixin_class (\@\$mixin_classes) {\n/ .
-            qq/        my \$full_qualified_method = "\${mixin_class}::$method";\n/ .
-            qq/        no strict 'refs';\n/ .
-            qq/        &{"\$full_qualified_method"}(\$self, \@_) if defined &{"\$full_qualified_method"};\n/ .
-            qq/    }\n/ .
-            qq/}\n/;
-            
-    eval "$code";
-    Carp::croak("$code\n$@") if $@;
+    my $code = sub {
+       my $method = shift;
+       return sub {
+           my $self = shift;
+           my $caller_class = caller;
+           my $mixin_classes = $Object::Simple::META->{$caller_class}{mixins};
+           return unless $mixin_classes;
+           foreach my $mixin_class (@$mixin_classes) {
+               my $full_qualified_method = "${mixin_class}::$method";
+               no strict 'refs';
+               &{"$full_qualified_method"}($self, @_) if defined &{"$full_qualified_method"};
+           }
+       }
+    };
     
     no strict 'refs';
+    *{"Object::Simple::MIXINS::$method"} = $code->($method);
     goto &{"Object::Simple::MIXINS::$method"};
 }
 
@@ -700,7 +700,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0019
+Version 2.0020
  
 =head1 FEATURES
  
@@ -1167,7 +1167,7 @@ Copyright 2008 Yuki Kimoto, all rights reserved.
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
  
- 
 =cut
  
 1; # End of Object::Simple
+
