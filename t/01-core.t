@@ -192,7 +192,7 @@ use T10;
 }
  
 eval "use T15";
-like($@, qr/'A' is bad. attribute must be 'Attr'/, 'bat attribute name');
+like($@, qr/'A' is bad name. attribute must be 'Attr','ClassAttr','Output', or 'Translate'/, 'bat attribute name');
  
 {
     use T16;
@@ -448,6 +448,7 @@ use T30;
 {
     my $t = T30->new;
     $t->m1(1);
+    
     is($t->m2->m1, 1, 'translate set value');
     is($t->m1, 1, 'translate get value');
 }
@@ -489,6 +490,23 @@ use T30;
 }
 
 {
+    # extend parent
+    my $t = T30->new;
+    $t->m9(1);
+    
+    is($t->m2->m1, 1, 'translate set value');
+    is($t->m9, 1, 'translate get value');
+}
+
+{
+    # extend parent constructor 
+    my $t = T30->new(m9 => 1);
+    
+    is($t->m2->m1, 1, 'translate set value');
+    is($t->m9, 1, 'translate get value');
+}
+
+{
     my $t = T30->new;
     $t->m8(k => 1);
     my $r = $t->m8;
@@ -500,7 +518,11 @@ use T30;
 
 {
     eval "use T32;";
-    like($@, qr/\Q'2->m1' is invalid.'translate' option must be like 'method1->method2'/, 'invalid translate value');
+    like($@, qr/\QT32::m1 '2->m1' is invalid. Translate 'target' option must be like 'method1->method2'/, 'invalid translate value');
+
+    eval "use T32_2;";
+    like($@, qr/\QT32_2::m1 '' is invalid. Translate 'target' option must be like 'method1->method2'/, 'invalid translate value');
+
     eval "use T33;";
     ok($@, 'translate invalid 2');
     eval "use T34;";
@@ -572,4 +594,16 @@ use T30;
     is_deeply({T39->m10}, { k1 => 1, k2 => 2 }, 'inherit super class accessor');
 }
 
+### Output accessor
+{
+    use T40;
+    T40
+      ->new
+      ->m1_to(\my $m1_result)
+      ->m2_to(\my $m2_result)
+    ;
+    
+    is($m1_result, 1, 'Output scalar');
+    is_deeply($m2_result, [1, 2], 'Output array ref');
+}
 __END__
