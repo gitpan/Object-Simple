@@ -5,7 +5,7 @@ use warnings;
  
 require Carp;
  
-our $VERSION = '2.0022';
+our $VERSION = '2.0101';
 
 # Meta imformation
 our $META = {};
@@ -746,7 +746,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0020
+Version 2.0101
  
 =head1 FEATURES
  
@@ -882,9 +882,15 @@ This new can be overided.
  
 resist attribute and create accessors.
  
-Script must build_class 'Object::Simple->build_class;'
+Script must call build_class at end of script;
  
-    Object::Simple->build_class; # End of Object::Simple!
+    Object::Simple->build_class;
+
+The class of caller package is build.
+
+You can also specify class
+
+    Object::Simple->build_class('SomeClass');
 
 =head3 resist_attribute_info
 
