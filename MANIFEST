@@ -45,6 +45,8 @@ t/01-core/T39.pm
 t/01-core/T4.pm
 t/01-core/T40.pm
 t/01-core/T41.pm
+t/01-core/T42.pm
+t/01-core/T43.pm
 t/01-core/T6.pm
 t/01-core/T7.pm
 t/02-core.t
