@@ -5,7 +5,7 @@ use warnings;
  
 require Carp;
 
-our $VERSION = '2.0301';
+our $VERSION = '2.0401';
 
 # Meta imformation
 our $META = {};
@@ -278,21 +278,20 @@ sub call_mixin {
     
     my $caller_class = caller;
     Carp::croak(qq/"${mixin_class}::$method from $caller_class" is not exist/)
-      unless $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method};
-    return $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method}->($self, @_);
+      unless $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{mixined}{$method};
+    return $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{mixined}{$method}->($self, @_);
 }
 
 # Get mixin methods
 sub mixin_methods {
     my $self         = shift;
     my $method       = shift || '';
-    
     my $caller_class = caller;
+
     my $method_refs = [];
-    
     foreach my $mixin_class (@{$Object::Simple::META->{$caller_class}{mixins}}) {
-        push @$method_refs, $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method}
-          if $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method};
+        push @$method_refs, $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{mixined}{$method}
+          if $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{mixined}{$method};
     }
     return $method_refs;
 }
@@ -300,21 +299,40 @@ sub mixin_methods {
 # Call super method
 sub call_super {
     my $self   = shift;
-    my $class  = shift || '';
-    my $method = shift || '';
+    my $method = shift;
     
+    my $base_class;
+    my $mixin_base_class;
+    if (ref $method eq 'ARRAY') {
+        $mixin_base_class = $method->[2];
+        $base_class       = $method->[1];
+        $method           = $method->[0];
+    }
+    $base_class  ||= caller;
+    
+    # Call last mixin method
+    my $mixin_found = $mixin_base_class ? 0 : 1;
+    if ($Object::Simple::META->{$base_class}{mixins}) {
+        foreach my $mixin_class (reverse @{$Object::Simple::META->{$base_class}{mixins}}) {
+            if ($mixin_base_class && $mixin_base_class eq $mixin_class) {
+                $mixin_found = 1;
+            }
+            elsif ($mixin_found && $Object::Simple::META->{$base_class}{mixin}{$mixin_class}{method}{mixined}{$method}) {
+                return $Object::Simple::META->{$base_class}{mixin}{$mixin_class}{method}{mixined}{$method}->($self, @_);
+            }
+        }
+    }
+    
+    # Call base class method
     my @leftmost_isa;
     
-    # Sortcut
-    return unless $class;
-    
-    my $leftmost_parent = $class;
+    my $leftmost_parent = $base_class;
     push @leftmost_isa, $leftmost_parent;
     no strict 'refs';
     while($leftmost_parent = ${"${leftmost_parent}::ISA"}[0]) {
         return &{"${leftmost_parent}::$method"}($self, @_) if defined &{"${leftmost_parent}::$method"};
     }
-    return;
+    Carp::croak("Cannot locate method '$method' via base class of $base_class");
 }
 
 package Object::Simple::Functions;
@@ -380,16 +398,20 @@ sub include_mixin_classes {
         foreach my $method ( keys %{"${mixin_class}::"} ) {
             next unless defined &{"${mixin_class}::$method"};
             
-            my $code = $deparse->coderef2text(\&{"${mixin_class}::$method"});
+            my $derive_class = $Object::Simple::META->{$mixin_class}{method}{$method}{derive};
+            my $deparse_method = $derive_class
+                               ? \&{"${derive_class}::$method"}
+                               : \&{"${mixin_class}::$method"};
+            
+            my $code = $deparse->coderef2text($deparse_method);
             $code =~ /^{\s*package\s+(.+?)\s*;/;
             my $package = $1 || '';
             
             my $code_ref;
-            if ($package eq $mixin_class && $code =~ /->SUPER::/) {
-                
-                my $base_class = $Object::Simple::META->{$caller_class}{base};
-                Carp::croak("Not base class") unless $base_class;
-                $code =~ s/->SUPER::(.+?)\(/->Object::Simple::call_super('$caller_class', '$1', /smg;
+            if ((($derive_class && $package eq $derive_class) || $package eq $mixin_class)
+              && $code =~ /->SUPER::/) 
+            {
+                $code =~ s/->SUPER::(.+?)\(/->Object::Simple::call_super([ '$1', '$caller_class', '$mixin_class'], /smg;
                 $code_ref = eval "sub $code";
                 Carp::croak("Code copy error : \n $code\n $@") if $@;
             }
@@ -397,10 +419,12 @@ sub include_mixin_classes {
                 $code_ref = \&{"${mixin_class}::$method"};
             }
             
-            $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method} = $code_ref;
+            $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{mixined}{$method} = $code_ref;
             
             next if defined &{"${caller_class}::$method"};
-            *{"${caller_class}::$method"} = $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method};
+            *{"${caller_class}::$method"} = $code_ref;
+            $Object::Simple::META->{$caller_class}{method}{$method}{derive} = 
+              $Object::Simple::META->{$mixin_class}{method}{$method}{derive} || $mixin_class;
         }
     }
     
@@ -803,7 +827,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0301
+Version 2.0401
  
 =head1 FEATURES
  
