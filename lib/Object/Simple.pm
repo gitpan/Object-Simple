@@ -5,7 +5,7 @@ use warnings;
  
 require Carp;
 
-our $VERSION = '2.0202';
+our $VERSION = '2.0301';
 
 # Meta imformation
 our $META = {};
@@ -169,6 +169,12 @@ sub build_class {
     
     # Inherit base class and Object::Simple, and include mixin classes
     foreach my $class (@build_need_classes) {
+        # Delete MODIFY_CODE_ATTRIBUTES
+        {
+            no strict 'refs';
+            delete ${$class . '::'}{MODIFY_CODE_ATTRIBUTES};
+        }
+        
         # Initialize attr_options if it is not set
         $Object::Simple::META->{$class}{attr_options} = {}
             unless $Object::Simple::META->{$class}{attr_options};
@@ -264,67 +270,51 @@ sub resist_attribute_info {
     push @Object::Simple::CODE_ATTRIBUTE_INFOS, [$class, $code_ref, $code_attribute_name, $attr_name];
 }
 
-package Object::Simple::UPPER;
-sub AUTOLOAD {
-    our $AUTOLOAD;
-    my $self = $_[0];
+# Call mixin method
+sub call_mixin {
+    my $self        = shift;
+    my $mixin_class = shift || '';
+    my $method      = shift || '';
+    
     my $caller_class = caller;
-    my $method = $AUTOLOAD;
-    $method =~ s/^.*:://;
-    
-    my $code = sub {
-        my $method = shift;
-        return sub {
-            my $self = shift;
-            my $caller_class = caller;
-            my $mixin_classes = $Object::Simple::META->{$caller_class}{mixins} || [];
-            foreach my $mixin_class (reverse @$mixin_classes) {
-                my $full_qualified_method = "${mixin_class}::$method";
-                no strict 'refs';
-                return &{"$full_qualified_method"}($self, @_) if defined &{"$full_qualified_method"};
-            }
-            my $base_class = $caller_class;
-            
-            no strict 'refs';
-            while($base_class = ${"${base_class}::ISA"}[0] ) {
-                my $full_qualified_method = "${base_class}::$method";
-                return &{"$full_qualified_method"}($self, @_) if defined &{"$full_qualified_method"};
-            }
-            Carp::croak("Cannot locate method '$method' via base class of $caller_class");
-        }
-    };
-    
-    no strict 'refs';
-    *{"Object::Simple::UPPER::$method"} = $code->($method);
-    goto &{"Object::Simple::UPPER::$method"};
+    Carp::croak(qq/"${mixin_class}::$method from $caller_class" is not exist/)
+      unless $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method};
+    return $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method}->($self, @_);
 }
 
-package Object::Simple::MIXINS;
-sub AUTOLOAD {
-    our $AUTOLOAD;
-    my $self = $_[0];
+# Get mixin methods
+sub mixin_methods {
+    my $self         = shift;
+    my $method       = shift || '';
+    
     my $caller_class = caller;
-    my $method = $AUTOLOAD;
-    $method =~ s/^.*:://;
+    my $method_refs = [];
     
-    my $code = sub {
-       my $method = shift;
-       return sub {
-           my $self = shift;
-           my $caller_class = caller;
-           my $mixin_classes = $Object::Simple::META->{$caller_class}{mixins};
-           return unless $mixin_classes;
-           foreach my $mixin_class (@$mixin_classes) {
-               my $full_qualified_method = "${mixin_class}::$method";
-               no strict 'refs';
-               &{"$full_qualified_method"}($self, @_) if defined &{"$full_qualified_method"};
-           }
-       }
-    };
+    foreach my $mixin_class (@{$Object::Simple::META->{$caller_class}{mixins}}) {
+        push @$method_refs, $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method}
+          if $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method};
+    }
+    return $method_refs;
+}
+
+# Call super method
+sub call_super {
+    my $self   = shift;
+    my $class  = shift || '';
+    my $method = shift || '';
     
+    my @leftmost_isa;
+    
+    # Sortcut
+    return unless $class;
+    
+    my $leftmost_parent = $class;
+    push @leftmost_isa, $leftmost_parent;
     no strict 'refs';
-    *{"Object::Simple::MIXINS::$method"} = $code->($method);
-    goto &{"Object::Simple::MIXINS::$method"};
+    while($leftmost_parent = ${"${leftmost_parent}::ISA"}[0]) {
+        return &{"${leftmost_parent}::$method"}($self, @_) if defined &{"${leftmost_parent}::$method"};
+    }
+    return;
 }
 
 package Object::Simple::Functions;
@@ -370,6 +360,10 @@ sub include_mixin_classes {
     # Mixin class attr options
     my $mixins_attr_options = {};
     
+    # Create deparse object
+    require B::Deparse;
+    my $deparse = B::Deparse->new;
+    
     # Include mixin classes
     no warnings 'redefine';
     foreach my $mixin_class (reverse @$mixin_classes) {
@@ -385,9 +379,28 @@ sub include_mixin_classes {
         no strict 'refs';
         foreach my $method ( keys %{"${mixin_class}::"} ) {
             next unless defined &{"${mixin_class}::$method"};
-            next if defined &{"${caller_class}::$method"};
             
-            *{"${caller_class}::$method"} = \&{"${mixin_class}::$method"};
+            my $code = $deparse->coderef2text(\&{"${mixin_class}::$method"});
+            $code =~ /^{\s*package\s+(.+?)\s*;/;
+            my $package = $1 || '';
+            
+            my $code_ref;
+            if ($package eq $mixin_class && $code =~ /->SUPER::/) {
+                
+                my $base_class = $Object::Simple::META->{$caller_class}{base};
+                Carp::croak("Not base class") unless $base_class;
+                $code =~ s/->SUPER::(.+?)\(/->Object::Simple::call_super('$caller_class', '$1', /smg;
+                $code_ref = eval "sub $code";
+                Carp::croak("Code copy error : \n $code\n $@") if $@;
+            }
+            else {
+                $code_ref = \&{"${mixin_class}::$method"};
+            }
+            
+            $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method} = $code_ref;
+            
+            next if defined &{"${caller_class}::$method"};
+            *{"${caller_class}::$method"} = $Object::Simple::META->{$caller_class}{mixin}{$mixin_class}{method}{$method};
         }
     }
     
@@ -782,6 +795,7 @@ sub define_MODIFY_CODE_ATTRIBUTES {
     *{"${class}::MODIFY_CODE_ATTRIBUTES"} = $code;
 }
 
+package Object::Simple;
 
 =head1 NAME
  
@@ -789,7 +803,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0202
+Version 2.0301
  
 =head1 FEATURES
  
@@ -956,6 +970,28 @@ This is equal to
 If you create accessor, you must call build_class
 
     Object::Simple->build_class('Book');
+
+=head2 call_mixin
+
+You can call any mixin method.
+
+    Object::Simple->call_mixin('SomeMixinClass', 'method_name');
+
+=head2 mixin_methods
+
+You can get all mixin methods reference and call each methods.
+
+    my $method_refs = Object::Simple->mixin_methods('SomeMixinClass', 'method_name');
+    
+    foreach my $method_ref (@$method_refs) {
+        $method_ref->($self, @args);
+    }
+    
+=head2 call_super
+
+You can call super class method. It is like SUPER keyword. but You can specify base class.
+
+    Object::Simple->call_super('BaseClass', 'method_name');
 
 =head1 ACCESSOR OPTIONS
  
@@ -1217,55 +1253,6 @@ If method names is crashed, method search order is the following
     package ThisClass;
     #                       4                       3              2
     Object::Simple(base => 'BaseClass', mixins => ['MixinClass1', 'MixinClass2']);
-
-=head1 CALLING MIXINS METHODS
-
-=head2 CALL ALL MIXINS METHODS
-
-You can call all methods of mixins methods.
-
-    $self->Object::Simple::MIXINS::initialize; # call all initialize of mixin classes
-    
-    $self->Object::Simple::MIXINS::DESTROY;    # call all DESTROY of mixin classes
-
-    $self->Object::Simple::MIXINS::method;     # any method ok!
-
-For example, you can call all initialize methods of mixin classes
-    package ThisClass;
-    Object::Simple(mixins => ['MixinClass1', 'MixinClass2']);
-    
-    sub initialize {
-        my $self = shift;
-        
-        # call initialize of all mixin class
-        $self->Object::Simple::MIXINS::initialize;
-    }
-
-=head2 CALL UPPER CLASS METHODS
-
-You can call upper methods.
-    
-    $self->Object::Simple::UPPER::method;
-
-Method is searched by the following order and call the method.
-
-1. Mixin class2
-
-2. Mixin class1
-
-3. Base class
-
-    package ThisClass;
-    Object::Simple(base => 'BaseClass', mixins => ['MixinClass1', 'MixinClass2']);
-
-    sub run {
-        my $self = shift;
-        $self->Object::Simple::UPPER::run;
-    }
-
-If MixinClass1 have run methods, MixinClass1::run is called.
-
-If MIxinClass1 and MixinClass2 have run method, MixinClass2::run is called.
 
 =head1 using your MODIFY_CODE_ATTRIBUTES subroutine
  

@@ -1,11 +1,10 @@
-package M12;
+package T45_Mixin2;
 use Object::Simple;
 
-sub m6 : Attr {}
-
-sub initialize {
+sub m6 {
     my $self = shift;
-    $self->m6(6);
+    return $self->SUPER::m6(0) + 2;
 }
+
 
 Object::Simple->build_class;

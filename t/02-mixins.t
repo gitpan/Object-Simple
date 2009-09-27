@@ -41,22 +41,23 @@ like($@, qr/\QMixin class '()()(' is invalid class name (T8)/, 'invalid mixin cl
 eval "use T9";
 like($@, qr/mixins must be array reference/, 'mixin must be array ref');
 
-# MIXINS_******
+# mixins  marged attribute
 {
     use T11;
     my $t = T11->new;
     is_deeply( $t, {m1 => 1, m2 => 4, m3 => 2, m4 => 2, m5 => 5, m6 =>6}, 'mixins attr');
 }
 
+# mixin_methods
 {
     use T12;
     my $t = T12->new;
-    is_deeply($t, {m1 => 1, m2 => 2, m3 => 3, m4 => 4}, 'MIXINS AUTOLOAD');
+    is_deeply($t, {m1 => 1, m2 => 2, m3 => 3, m4 => 4}, 'mixin_methods');
 }
 
 {
     my $t = T12->new;
-    is_deeply($t, {m1 => 1, m2 => 2, m3 => 3, m4 => 4}, 'MIXINS AUTOLOA second');
+    is_deeply($t, {m1 => 1, m2 => 2, m3 => 3, m4 => 4}, 'mixin_methods');
 }
 
 use T13;
@@ -65,13 +66,14 @@ use T13;
     is_deeply($t, {m1 => 1, m2 => 2, m3 => 3, m4 => 4, m5 => 5, m6 => 6, m7 => 7}, 'MIXINS AUTOLOA second');
 }
 
+# mixin double
 use T14;
 {
     my $t = T14->new;
     is_deeply($t, {m1 => 1, m2 => 2}, 'mixin double');
 }
 
-# UPPER_******
+# mixin_methods
 use T15;
 {
     my $t = T15->new;
@@ -90,8 +92,25 @@ use T15;
     
     is($t->m5, 5, 'UPPER_method Object::Simple');
     
-    eval{ $t->m6 };
-    like($@, qr/Cannot locate method 'm6' via base class of T15/, 'UPPER_method no exist');
+}
+
+# call_mixin
+{
+    my $t = T15->new;
+    is($t->m7, 3, 'call_mixin');
+    
+    eval{ $t->m8 };
+    like($@, qr/"NoExist::m7 from T15" is not exist/, 'call_mixin error1');
+
+    eval{ $t->m9 };
+    like($@, qr/"M19::no_exist from T15" is not exist/, 'call_mixin error2');
+
+    eval{ $t->m10 };
+    like($@, qr/":: from T15" is not exist/, 'call_mixin error3');
+
+    eval{ $t->m11 };
+    like($@, qr/"M19:: from T15" is not exist/, 'call_mixin error4');
+    
 }
 
 use T16;

@@ -47,6 +47,13 @@ t/01-core/T40.pm
 t/01-core/T41.pm
 t/01-core/T42.pm
 t/01-core/T43.pm
+t/01-core/T44.pm
+t/01-core/T44_Base.pm
+t/01-core/T44_Mixin.pm
+t/01-core/T45.pm
+t/01-core/T45_Base.pm
+t/01-core/T45_Mixin.pm
+t/01-core/T45_Mixin2.pm
 t/01-core/T6.pm
 t/01-core/T7.pm
 t/02-core.t
