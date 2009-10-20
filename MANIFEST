@@ -55,6 +55,7 @@ t/01-core/T45_Base.pm
 t/01-core/T45_Base_Base.pm
 t/01-core/T45_Mixin.pm
 t/01-core/T45_Mixin2.pm
+t/01-core/T46.pm
 t/01-core/T6.pm
 t/01-core/T7.pm
 t/02-core.t

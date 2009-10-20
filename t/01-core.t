@@ -97,8 +97,8 @@ use Point;
 }
 {
     my $p = Point->new;
-    is_deeply($p, {x => 1, y => 1, p => $Object::Simple::META->{Point}{attr_options}{p}{default}->()}, 'default overwrited' );
-    cmp_ok(ref $Object::Simple::META->{Point}{attr_options}{p}{default}, 'ne', $p->p, 'default different ref' );
+    is_deeply($p, {x => 1, y => 1, p => $Object::Simple::CLASS_INFOS->{Point}{attrs}{p}{options}{default}->()}, 'default overwrited' );
+    cmp_ok(ref $Object::Simple::CLASS_INFOS->{Point}{attrs}{p}{options}{default}, 'ne', $p->p, 'default different ref' );
 }
  
 use T1;
@@ -192,7 +192,7 @@ use T10;
 }
  
 eval "use T15";
-like($@, qr/'A' is bad name. attribute must be 'Attr','ClassAttr','Output', or 'Translate'/, 'bat attribute name');
+like($@, qr/'A' is bad name. attribute must be 'Attr', 'ClassAttr', 'ClassObjectAttr', Output', or 'Translate'/, 'bat attribute name');
  
 {
     use T16;
@@ -548,7 +548,7 @@ use T30;
     
     my $p = {};
     T37->m3($p);
-    ok(Scalar::Util::isweak($Object::Simple::META->{'T37'}{class_attr}{'m3'}), 'class accessor weak package variable');
+    ok(Scalar::Util::isweak($Object::Simple::CLASS_INFOS->{'T37'}{attrs}{'m3'}{value}), 'class accessor weak package variable');
     is(T37->m3, $p, 'class accessor weak get');
     
     eval{T37->m4(4)};
@@ -663,6 +663,28 @@ use T45;
     is($o->m4, 5, 'Mixin call super class5');
     is($o->m5, 6, 'Mixin call super class6');
     is($o->m6(6,7), 159, 'Mixin call super class7');
+}
+
+use T46;
+{
+    my $o = T46->new;
+    $o->m1([1,2]);
+    is_deeply(scalar $o->m1, [1, 2], 'ClassObjectAttr object accessor');
+    is_deeply([$o->m1], [1, 2], 'ClassObjectAttr object accessor list context');
+    ok(!exists $o->{m2});
+    is_deeply($o->m2, [5, 6], 'ClassObjectAttr object accessor auto_build');
+    
+    T46->m1([3, 4]);
+    is_deeply(scalar T46->m1, [3, 4], 'ClassObjectAttr class accessor');
+    is_deeply([T46->m1], [3, 4], 'ClassObjectAttr class accessor list context');
+    ok(!T46->exists_class_attr('m2'));
+    is_deeply(T46->m2, [5, 6], 'ClassObjectAttr class accessor auto_build');
+    T46->m2;
+    
+    ok(T46->exists_class_attr('m2'), 'key is exists');
+    my $delete = T46->delete_class_attr('m2');
+    is_deeply($delete, [5, 6], 'delete value');
+    ok(!T46->exists_class_attr('m2'));
 }
 
 
