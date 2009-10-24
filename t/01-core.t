@@ -97,8 +97,8 @@ use Point;
 }
 {
     my $p = Point->new;
-    is_deeply($p, {x => 1, y => 1, p => $Object::Simple::CLASS_INFOS->{Point}{attrs}{p}{options}{default}->()}, 'default overwrited' );
-    cmp_ok(ref $Object::Simple::CLASS_INFOS->{Point}{attrs}{p}{options}{default}, 'ne', $p->p, 'default different ref' );
+    is_deeply($p, {x => 1, y => 1, p => $Object::Simple::CLASS_INFOS->{Point}{accessors}{p}{options}{default}->()}, 'default overwrited' );
+    cmp_ok(ref $Object::Simple::CLASS_INFOS->{Point}{accessors}{p}{options}{default}, 'ne', $p->p, 'default different ref' );
 }
  
 use T1;
@@ -192,7 +192,7 @@ use T10;
 }
  
 eval "use T15";
-like($@, qr/'A' is bad name. attribute must be 'Attr', 'ClassAttr', 'ClassObjectAttr', Output', or 'Translate'/, 'bat attribute name');
+like($@, qr/Accessor type 'A' is not exist. Accessor type must be 'Attr', 'ClassAttr', 'ClassObjectAttr', 'Output', or 'Translate'/, 'Not exist accessor name');
  
 {
     use T16;
@@ -548,7 +548,7 @@ use T30;
     
     my $p = {};
     T37->m3($p);
-    ok(Scalar::Util::isweak($Object::Simple::CLASS_INFOS->{'T37'}{attrs}{'m3'}{value}), 'class accessor weak package variable');
+    ok(Scalar::Util::isweak($Object::Simple::CLASS_INFOS->{'T37'}{accessors}{'m3'}{value}), 'class accessor weak package variable');
     is(T37->m3, $p, 'class accessor weak get');
     
     eval{T37->m4(4)};
@@ -693,6 +693,68 @@ use T46;
     is_deeply($o, {m1 => 5, m2 => 6}, 'ClassObjectAttr constructor');
 }
 
+use T47;
+{
+    my $p = T47->m1;
+    is(T47->m1, 1, 'initialize_class_object_attr scalar class');
+    is_deeply(T47->m2, [1, 2], 'initialize_class_object_attr array class');
+    is_deeply(T47->m3, {a => 1, b => 2}, 'initialize_class_object_attr hash class');
+}
+
+{
+    my $o = T47->new;
+    is($o->m1, 1, 'initialize_class_object_attr scalar object');
+    is_deeply($o->m2, [1, 2], 'initialize_class_object_attr array object');
+    is_deeply($o->m3, {a => 1, b => 2}, 'initialize_class_object_attr hash object');
+}
+
+{
+    my $p = T47_2->m1;
+    is(T47_2->m1, 1, 'initialize_class_object_attr scalar sub class ');
+    is_deeply(T47_2->m2, [1, 2], 'initialize_class_object_attr array sub class');
+    is_deeply(T47_2->m3, {a => 1, b => 2}, 'initialize_class_object_attr hash sub class');
+}
+
+{
+    my $o = T47_2->new;
+    is($o->m1, 1, 'initialize_class_object_attr scalar sub object');
+    is_deeply($o->m2, [1, 2], 'initialize_class_object_attr array sub object');
+    is_deeply($o->m3, {a => 1, b => 2}, 'initialize_class_object_attr hash sub object');
+}
+
+{
+    T47_2->m1(2);
+    is(T47->m1, 1, 'no effect');
+    is(T47_2->m1, 2, 'no effect');
+    my $o = T47_2->new;
+    $o->m1;
+    is($o->m1, 2, 'copied class');
+}
+
+{
+    my $o = T47_4->new;
+    is($o->m1, 2, 'initialize_class_object_attr scalar multi inherit object');
+    is_deeply($o->m2, [1, 2], 'initialize_class_object_attr array multi inherit object');
+    is_deeply($o->m3, {a => 1, b => 2}, 'initialize_class_object_attr hash multi inherit object');
+}
+
+{
+    is(T47->new->m4, 6, 'user clone method');
+}
+
+{
+    eval{T47->m5};
+    like($@, qr/'clone' option must be 'scalar', 'array', 'hash', or code reference/, 'noexis clone option');
+    
+    eval{T47->m6};
+    like($@, qr/'accessor_name' options must be specified to initialize_class_object_attr/, 'no accessor_name option');
+
+    eval{T47->m7};
+    like($@, qr/'default' option must be scalar, or code ref/, 'no dfault option');
+    
+    eval{T47->m8};
+    ok(!T47->m8, 'default is undef');
+}
 
 
 __END__
