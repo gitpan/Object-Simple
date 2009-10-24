@@ -746,9 +746,11 @@ use T47;
     eval{T47->m5};
     like($@, qr/'clone' option must be 'scalar', 'array', 'hash', or code reference/, 'noexis clone option');
     
-    eval{T47->m6};
+    is(T47->m6, 3);
+    
+    eval{T47->m11};
     like($@, qr/'accessor_name' options must be specified to initialize_class_object_attr/, 'no accessor_name option');
-
+    
     eval{T47->m7};
     like($@, qr/'default' option must be scalar, or code ref/, 'no dfault option');
     

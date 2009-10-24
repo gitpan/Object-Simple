@@ -5,7 +5,7 @@ use warnings;
  
 use Carp 'croak';
 
-our $VERSION = '2.0602';
+our $VERSION = '2.0603';
 
 # Meta imformation
 our $CLASS_INFOS = {};
@@ -89,7 +89,7 @@ sub new {
         }
     }
 }
- 
+
 # Build class(create accessor, include mixin class, and create constructor)
 my %VALID_BUILD_CLASS_OPTIONS = map {$_ => 1} qw(all class);
 
@@ -388,12 +388,19 @@ sub initialize_class_object_attr {
     my $options = ref $_[0] eq 'HASH' ? $_[0] : {@_};
     
     # accessor_name option
-    my $accessor_name = delete $options->{accessor_name};
+    my $accessor_name = $options->{accessor_name};
+    
+    if (! exists $options->{accessor_name}) {
+        package DB;
+        
+        my @c = caller 1;
+        $accessor_name = $DB::args[1]->{accessor_name};
+    }
     croak("'accessor_name' options must be specified to initialize_class_object_attr")
       unless $accessor_name;
     
     # clone option
-    my $clone   = delete $options->{clone};
+    my $clone   = $options->{clone};
     
     # clone is undefined
     croak("'clone' options must be specified to initialize_class_object_attr")
@@ -417,7 +424,7 @@ sub initialize_class_object_attr {
     
     # default options
     my $default_exist = exists $options->{default};
-    my $default = delete $options->{default};
+    my $default = $options->{default};
     
     # Check default option
     if ($default_exist && (my $default_type = ref $default)) {
@@ -1037,7 +1044,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 VERSION
  
-Version 2.0602
+Version 2.0603
  
 =head1 FEATURES
  
@@ -1211,27 +1218,20 @@ If You do not pass class name to build_class, caller class is build.
     # Initialize Class attribute or Object attribute
     sub method : ClassObjectAttr {atuo_build => sub {
         shift->Object::Simple::initialize_class_object_attr(
-                                            {accessor_name => $accessor_name,   
-                                             clone         => $clone_method,    
+                                            {clone         => $clone_method,    
                                              default       => $default_value });
     }
     
     # Sample
     sub constraints : ClassObjectAttr {atuo_build => sub {
         shift->Object::Simple::initialize_class_object_attr(
-                                            {accessor_name => 'constraints', 
-                                             clone         => 'hash',        
+                                            {clone         => 'hash',        
                                              default       => sub { {} } }); 
     }
     
 It is normally used from auto_build to initialize class-object accessor value
 This method clone super class value to this class when invocant is class
 and clone clas value to object value when invacant is object
-
-Accessor name is specified to 'accessor_name' option.
-
-   # Sample
-   accessor_name => 'constraints'
 
 Clone option must be specified.The following is clone options
 

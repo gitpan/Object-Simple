@@ -45,7 +45,7 @@ sub m5 : ClassObjectAttr {auto_build => sub {
 sub m6 : ClassObjectAttr {auto_build => sub {
     shift->Object::Simple::initialize_class_object_attr({
         clone         => 'scalar',
-        default       => sub {3}
+        default       => 3
     })
 }}
 
@@ -77,6 +77,14 @@ sub m10 : ClassObjectAttr {type => 'array', deref => 1, auto_build => sub {
         accessor_name => 'm10',
         clone         => 'array',
         default       => sub { [1, 2] }
+    })
+}}
+
+sub m11 : ClassObjectAttr {auto_build => sub {
+    shift->Object::Simple::initialize_class_object_attr({
+        accessor_name => 'm8',
+        clone         => 'scalar',
+        accessor_name => undef
     })
 }}
 
