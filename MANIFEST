@@ -57,6 +57,10 @@ t/01-core/T45_Mixin.pm
 t/01-core/T45_Mixin2.pm
 t/01-core/T46.pm
 t/01-core/T47.pm
+t/01-core/T47_Error1.pm
+t/01-core/T47_Error2.pm
+t/01-core/T47_Error3.pm
+t/01-core/T47_Error4.pm
 t/01-core/T6.pm
 t/01-core/T7.pm
 t/02-core.t
