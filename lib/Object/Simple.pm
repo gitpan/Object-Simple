@@ -5,7 +5,7 @@ use warnings;
  
 use Carp 'croak';
 
-our $VERSION = '2.0702';
+our $VERSION = '2.0801';
 
 # Meta imformation
 our $CLASS_INFOS = {};
@@ -619,11 +619,13 @@ sub create_constructor {
         if(defined $accessors->{$accessor_name}{options}{default}) {
             if(ref $accessors->{$accessor_name}{options}{default} eq 'CODE') {
                 $code .=
-                qq/    \$self->{'$accessor_name'} ||= \$CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{default}->();\n/;
+                qq/    \$self->{'$accessor_name'} = \$CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{default}->()\n/ .
+                qq/      unless exists \$self->{'$accessor_name'};\n/;
             }
             elsif(!ref $accessors->{$accessor_name}{options}{default}) {
                 $code .=
-                qq/    \$self->{'$accessor_name'} ||= \$CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{default};\n/;
+                qq/    \$self->{'$accessor_name'} = \$CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{default}\n/ .
+                qq/      unless exists \$self->{'$accessor_name'};\n/;
             }
             else {
                 croak("Value of 'default' option must be a code reference or constant value(${class}::$accessor_name)");
@@ -645,7 +647,7 @@ sub create_constructor {
     # Trigger option
     foreach my $accessor_name (@accessors_having_trigger) {
         $code .=
-            qq/    \$Object::Simple::CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{trigger}->(\$self, \$self->{'$accessor_name'}) if exists \$self->{'$accessor_name'};\n/;
+            qq/    \$Object::Simple::CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{trigger}->(\$self) if exists \$self->{'$accessor_name'};\n/;
     }
     
     # Translate option
@@ -807,17 +809,15 @@ sub create_accessor {
             $value = '$value';
         }
         
-        # Store argument optimized
-        if (!$weak && !$chained && !$trigger) {
+        # Save old value
+        if ($trigger) {
             $code .=
-                qq/        return $strage = $value;\n/;
+                qq/        my \$old = $strage;\n/;
         }
         
-        # Store argument the old way
-        else {
-            $code .=
+        # Set value
+        $code .=
                 qq/        $strage = $value;\n/;
-        }
         
         # Weaken
         if ($weak) {
@@ -832,10 +832,10 @@ sub create_accessor {
               unless ref $trigger eq 'CODE';
             
             $code .=
-                qq/        \$Object::Simple::CLASS_INFOS->{'$class'}{accessors}{'$accessor_name'}{options}{trigger}->(\$self, $value);\n/;
+                qq/        \$Object::Simple::CLASS_INFOS->{'$class'}{accessors}{'$accessor_name'}{options}{trigger}->(\$self, \$old);\n/;
         }
         
-        # Return value or instance for chained/weak
+        # Return self if chained
         if ($chained) {
             $code .=
                 qq/        return \$self;\n/;
@@ -1050,11 +1050,11 @@ package Object::Simple;
  
 Object::Simple - Light Weight Minimal Object System
  
-=head1 VERSION
+=head1 Version
  
-Version 2.0702
+Version 2.0801
  
-=head1 FEATURES
+=head1 Features
  
 =over 4
  
@@ -1073,7 +1073,7 @@ writing new and accessors repeatedly.
 
 =cut
  
-=head1 SYNOPSIS
+=head1 Synopsis
  
     # Class definition( Book.pm )
     package Book;
@@ -1089,53 +1089,64 @@ writing new and accessors repeatedly.
     use Book;
     my $book = Book->new(title => 'a', author => 'b', price => 1000);
     
-    # Default value
-    sub author : Attr { default => 'Kimoto' }
+    # Default value (number or string)
+    sub author : Attr { default => 'taro' }
     
-    #Automatically build
-    sub author : Attr { auto_build => 1 }
-    sub build_author{ 
+    # Default value (reference)
+    sub persons : Attr { default => sub { ['taro', 'ken'] } }
+    
+    # Automatically build
+    sub author : Attr { auto_build => sub {
         my $self = shift;
-        $self->author( $self->title . "b" );
-    }
+        $self->author($self->title . "b");
+    }}
     
     # Read only accessor
     sub year : Attr { read_only => 1 }
     
-    # weak reference
+    # Weak reference
     sub parent : Attr { weak => 1 }
     
-    # method chaine
+    # Method chaine (default is true)
     sub title : Attr { chained => 1 }
     
-    # variable type
+    # Variable type
     sub authors : Attr { type => 'array' }
     sub country : Attr { type => 'hash' }
     
-    # convert to object
+    # Convert to object
     sub url : Attr { convert => 'URI' }
     sub url : Attr { convert => sub{ ref $_[0] ? $_[0] : URI->new($_[0]) } }
     
-    # derefference of returned value
+    # Derefference of returned value
     sub authors    : Attr { type => 'array', deref => 1 }
     sub country_id : Attr { type => 'hash',  deref => 1 }
     
-    # trigger option
-    sub error : Attr { trigger => sub{ $_[0]->state('error') } }
+    # Trigger when value is set
+    sub error : Attr { trigger => sub{
+        my $self = shift;
+        $self->state('error');
+    }}
     sub state : Attr {}
     
-    # define accessor for class variable
+    # Define accessor for class attriute
     sub options : ClassAttr {
         type => 'array',
         auto_build => sub { shift->options([]) }
     }
     
-    # define translate accessor
+    # Define accessor for both object attribute and class attribute
+    sub options : ClassObjectAttr {
+        type => 'array',
+        auto_build => sub { shift->options([]) }
+    }
+    
+    # Define translate accessor
     sub person : Attr { default => sub{ Person->new } }
     sub name   : Translate { target => 'person->name' }
     sub age    : Translate { target => 'person->age' }
     
-    # define accessor to output attribute value
+    # Define accessor to output attribute value
     sub errors    : Attr   {}
     sub errors_to : Output { target => 'errors' }
     
@@ -1155,24 +1166,24 @@ writing new and accessors repeatedly.
 
 =cut
  
-=head1 METHODS
+=head1 Methods
  
 =head2 new
 
-    # New passing hash
+    # New (receive hash)
     $self = $class->new($key1 => $val1, $key1 => $val2, ...);
     
     # Sample
     my $book = Book->new(title => 'Perl', author => 'Taro', price => 200);
     
     
-    # New pssing hash ref
+    # New (recieve hash reference)
     $self = $class->new({$key1 => $val1, $key1 => $val2, ...});
     
     # Sample
     my $book = Book->new({title => 'Perl', author => 'Taro', price => 200});
 
-Object::Simple has new method. so you do not defined new method by yourself.
+Object::Simple have new method. so you do not defined new method by yourself.
 new can receive hash or hash reference
 
 You can also override new
@@ -1197,7 +1208,7 @@ You can also override new
     sub new {
         my ($class, $title, $author) = @_;
         my $self = $class->Object::Simple::new(title => $title,
-                                              author => $author);
+                                               author => $author);
         
         return $self;
     }
@@ -1307,7 +1318,7 @@ Method is serched by using the follwoing order.
      | This class   |
      +--------------+
 
-=head1 ACCESSOR OPTIONS
+=head1 Accessor options
  
 =head2 default
  
@@ -1412,8 +1423,16 @@ You can derefference returned value.You must specify it with 'type' option.
 
 You can defined trigger function when value is set.
 
-    sub error : Attr { trigger => sub{ $_[0]->stete('error') } }
+    sub error : Attr { trigger => sub{
+        my ($self, $old) = @_;
+        $self->state('error') if $self->error;
+    }}
     sub state : Attr {}
+
+trigger function recieve two argument.
+
+    1. $self
+    2. $old : old value
 
 =head2 extend
 
@@ -1473,7 +1492,7 @@ and class attribute is cloned when invacant is object
     default => sub { [] }  # array ref
     default => sub { {} }  # hash
 
-=head1 SPECIAL ACCESSOR
+=head1 Special accessors
 
 =head2 ClassAttr - Accessor for class variable
 
@@ -1547,7 +1566,7 @@ You can define accessor shortcut of object of other attribute value.
 
 You can accesse person->name when you call name.
 
-=head1 INHERITANCE
+=head1 Inheritance
  
     # Inheritance
     package Magazine;
@@ -1555,7 +1574,7 @@ You can accesse person->name when you call name.
  
 Object::Simple do not support multiple inheritance because it is so complex.
  
-=head1 MIXIN
+=head1 Mixin
  
 Object::Simple support mixin syntax
  
@@ -1588,7 +1607,7 @@ Object::Simple mixin merge mixin class attribute.
 
 Because Some::Mixin is mixined, Some::Class has two attribute m1 and m2.
 
-=head1 METHODS SEARCHING ORDER
+=head1 Method searching order
 
 Method searching order is like Ruby.
 
@@ -1623,7 +1642,7 @@ If method names is crashed, method search order is the following
     #                       4                       3              2
     Object::Simple(base => 'BaseClass', mixins => ['MixinClass1', 'MixinClass2']);
 
-=head1 using your MODIFY_CODE_ATTRIBUTES subroutine
+=head1 Using your MODIFY_CODE_ATTRIBUTES subroutine
  
 Object::Simple define own MODIFY_CODE_ATTRIBUTES subroutine.
 If you use your MODIFY_CODE_ATTRIBUTES subroutine, do 'no Object::Simple;'
@@ -1646,7 +1665,7 @@ If you use your MODIFY_CODE_ATTRIBUTES subroutine, do 'no Object::Simple;'
     
     Object::Simple->build_class;
 
-=head1 INTERNAL
+=head1 Internal
 
 =head2 CLASS_INFOS package variable
 
@@ -1668,17 +1687,29 @@ If you use your MODIFY_CODE_ATTRIBUTES subroutine, do 'no Object::Simple;'
 This variable structure will be change. so You shoud not access this variable.
 Please only use to undarstand Object::Simple well.
 
-=head1 AUTHOR
+=head1 Object::Simple sample
+
+These modules use Object::Simple. it will be Good sample.
+
+You can create custamizable module easy way.
+
+L<Validator::Custom>, L<DBIx::Custom>
+
+=head1 Author
  
 Yuki Kimoto, C<< <kimoto.yuki at gmail.com> >>
  
 Github L<http://github.com/yuki-kimoto/>
 
-=head1 SEE ALSO
+I develope this module at 
+
+=head1 Similar modules
+
+These is various class builders.
  
 L<Class::Accessor>,L<Class::Accessor::Fast>, L<Moose>, L<Mouse>, L<Mojo::Base>
  
-=head1 COPYRIGHT & LICENSE
+=head1 Copyright & license
  
 Copyright 2008 Yuki Kimoto, all rights reserved.
  
