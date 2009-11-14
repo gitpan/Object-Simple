@@ -5,7 +5,7 @@ use warnings;
  
 use Carp 'croak';
 
-our $VERSION = '2.0801';
+our $VERSION = '2.0802';
 
 # Meta imformation
 our $CLASS_INFOS = {};
@@ -230,12 +230,14 @@ sub build_class {
             
             # Create accessor source code
             if ($accessor_type eq 'Translate') {
+                ### Translate accessor will be deleted in future ###
                 # Create translate accessor
                 $accessor_code 
                   .= "package $class;\nsub $accessor_name " 
                   . Object::Simple::Functions::create_translate_accessor($class, $accessor_name);
             }
             elsif ($accessor_type eq 'Output') {
+                ### Output accessor will be deleted in future ###
                 # Create output accessor
                 $accessor_code
                   .= "package $class;\nsub $accessor_name " 
@@ -897,6 +899,7 @@ sub create_class_object_accessor {
     return $code;
 }
 
+### Output accessor will be deleted in future ###
 # Create accessor for output
 sub create_output_accessor {
     my ($class, $accessor_name) = @_;
@@ -912,6 +915,7 @@ sub create_output_accessor {
     return $code;
 }
 
+### Translate accessor will be deleted in future ###
 # Create accessor for delegate
 sub create_translate_accessor {
     my ($class, $accessor_name) = @_;
@@ -991,10 +995,12 @@ my %VALID_CLASS_ACCESSOR_OPTIONS
 my %VALID_CLASS_OBJECT_ACCESSOR_OPTIONS
   = map {$_ => 1} qw(chained weak read_only auto_build type convert deref trigger translate extend initialize);
 
+### Output accessor will be deleted in future ###
 # Valid class output accessor options(Output)
 my %VALID_OUTPUT_OPTIONS
   = map {$_ => 1} qw(target);
-  
+
+### Translate accessor will be deleted in future ###
 # Valid translate accessor option(Translate)
 my %VALID_TRANSLATE_OPTIONS
   = map {$_ => 1} qw(target);
@@ -1031,7 +1037,7 @@ sub define_MODIFY_CODE_ATTRIBUTES {
         # Accessor type is not exist
         croak("Accessor type '$accessor_type' is not exist. " .
               "Accessor type must be 'Attr', 'ClassAttr', " . 
-              "'ClassObjectAttr', 'Output', or 'Translate'")
+              "'ClassObjectAttr'")
           unless $VALID_ACCESSOR_TYPES{$accessor_type};
         
         # Add 
@@ -1052,7 +1058,7 @@ Object::Simple - Light Weight Minimal Object System
  
 =head1 Version
  
-Version 2.0801
+Version 2.0802
  
 =head1 Features
  
@@ -1140,15 +1146,6 @@ writing new and accessors repeatedly.
         type => 'array',
         auto_build => sub { shift->options([]) }
     }
-    
-    # Define translate accessor
-    sub person : Attr { default => sub{ Person->new } }
-    sub name   : Translate { target => 'person->name' }
-    sub age    : Translate { target => 'person->age' }
-    
-    # Define accessor to output attribute value
-    sub errors    : Attr   {}
-    sub errors_to : Output { target => 'errors' }
     
     # Inheritance
     package Magazine;
@@ -1526,46 +1523,6 @@ If you invoke method from class, data is saved into class
 
 This is very useful.
 
-=head2 Output - Accessor to output attribute value
-
-You can define accessor to output attribute value
-
-    # define accessor to output attribute value
-    sub errors    : Attr   {}
-    sub errors_to : Output { target => 'errors' }
-    
-    sub results    : Attr   {}
-    sub results_to : Output { target => 'results' }
-    
-This accessor is used the following way.
-
-Create instance and Set input file and parse.
-parse method save the parsed results to results attribute and  some errors to errors attribute
-and continuasly get resutls to $results variable and get errors to $errors variable.
-    
-    use SomeParser;
-    SomeParser
-      ->new
-      ->input_file('somefile')
-      ->parse
-      ->results_to(\my $results)
-      ->errors_to(\my $errors)
-    ;
-    
-You are not familiar with this style.
-But this style is very beautiful and write a soruce code without duplication.
-And You can get rid of typo in source code.
-
-=head2 Translate - Accessor to convert to other accessor
-
-You can define accessor shortcut of object of other attribute value.
-    
-    sub person : Attr { default => sub{ Person->new } }
-    sub name   : Attr { translate => 'person->name' }
-    sub age    : Attr { translate => 'person->age' }
-
-You can accesse person->name when you call name.
-
 =head1 Inheritance
  
     # Inheritance
@@ -1689,7 +1646,7 @@ Please only use to undarstand Object::Simple well.
 
 =head1 Object::Simple sample
 
-These modules use Object::Simple. it will be Good sample.
+The following modules use Object::Simple. it will be Good sample.
 
 You can create custamizable module easy way.
 
@@ -1708,7 +1665,13 @@ I develope this module at
 These is various class builders.
  
 L<Class::Accessor>,L<Class::Accessor::Fast>, L<Moose>, L<Mouse>, L<Mojo::Base>
- 
+
+=head1 CAUTION
+
+Translate and Output accessor will be deleted in future.
+
+Please do not use Translate and Output accessor
+
 =head1 Copyright & license
  
 Copyright 2008 Yuki Kimoto, all rights reserved.

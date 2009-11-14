@@ -205,7 +205,7 @@ use T10;
 }
  
 eval "use T15";
-like($@, qr/Accessor type 'A' is not exist. Accessor type must be 'Attr', 'ClassAttr', 'ClassObjectAttr', 'Output', or 'Translate'/, 'Not exist accessor name');
+like($@, qr/Accessor type 'A' is not exist. Accessor type must be 'Attr', 'ClassAttr', 'ClassObjectAttr'/, 'Not exist accessor name');
  
 {
     use T16;

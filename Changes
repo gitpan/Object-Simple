@@ -1,3 +1,5 @@
+2.0802
+  delete document about Translate accessor and Output accessor, these will be deleted in future
 2.0801
   fix    : when  undef value pass new, default value is set
   change : trigger second argument receive old value(not backword compatible)
