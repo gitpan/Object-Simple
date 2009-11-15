@@ -5,7 +5,7 @@ use warnings;
  
 use Carp 'croak';
 
-our $VERSION = '2.0802';
+our $VERSION = '2.0803';
 
 # Meta imformation
 our $CLASS_INFOS = {};
@@ -322,14 +322,14 @@ sub mixin_methods {
     my $method       = shift || '';
     my $caller_class = caller;
     
-    my $method_refs = [];
+    my $methods = [];
     foreach my $mixin_class (@{$Object::Simple::CLASS_INFOS->{$caller_class}{mixins}}) {
         
-        push @$method_refs,
+        push @$methods,
              $Object::Simple::CLASS_INFOS->{$caller_class}{mixin}{$mixin_class}{methods}{$method}
           if $Object::Simple::CLASS_INFOS->{$caller_class}{mixin}{$mixin_class}{methods}{$method};
     }
-    return $method_refs;
+    return $methods;
 }
 
 # Call super method
@@ -1054,11 +1054,11 @@ package Object::Simple;
 
 =head1 NAME
  
-Object::Simple - Light Weight Minimal Object System
+Object::Simple - Simple class builder
  
 =head1 Version
  
-Version 2.0802
+Version 2.0803
  
 =head1 Features
  
@@ -1096,25 +1096,25 @@ writing new and accessors repeatedly.
     my $book = Book->new(title => 'a', author => 'b', price => 1000);
     
     # Default value (number or string)
-    sub author : Attr { default => 'taro' }
+    sub author  : Attr { default => 'taro' }
     
     # Default value (reference)
     sub persons : Attr { default => sub { ['taro', 'ken'] } }
     
     # Automatically build
-    sub author : Attr { auto_build => sub {
+    sub author  : Attr { auto_build => sub {
         my $self = shift;
         $self->author($self->title . "b");
     }}
     
     # Read only accessor
-    sub year : Attr { read_only => 1 }
+    sub year   : Attr { read_only => 1 }
     
     # Weak reference
     sub parent : Attr { weak => 1 }
     
     # Method chaine (default is true)
-    sub title : Attr { chained => 1 }
+    sub title  : Attr { chained => 1 }
     
     # Variable type
     sub authors : Attr { type => 'array' }
@@ -1277,25 +1277,25 @@ If you want to create accessor, you must call build_class
 =head2 call_mixin
 
     # Call method of mixin class
-    Object::Simple->call_mixin($mixin_class, $method_name);
+    $self->call_mixin($mixin_class, $method_name);
 
-You cann call any method of mixin class, even if method is not import to your class
+You can call any method of mixin class, even if method is not import to your class
 
 =head2 mixin_methods
     
     # Get all same name method of mixin classes
-    my $method_refs = Object::Simple->mixin_methods($mixin_class, $method_name);
+    my $methods = $self->mixin_methods($method_name);
     
     # Call all method
-    foreach my $method_ref (@$method_refs) {
-        $method_ref->($self, @args);
+    foreach my $method (@$methods) {
+        $self->$method(@args);
     }
     
 =head2 call_super
 
     # Call method of super class
-    Object::Simple->call_super($base_class, $method_name);
-    
+    $self->call_super($method_name);
+
 You can call method of super class. but this method do not call method of real super class.
 Method is serched by using the follwoing order.
 
@@ -1381,7 +1381,7 @@ attribute value is weak reference.
 You can specify variable type( array, hash );
 
     # variable type
-    sub authors : Attr { type => 'array' }
+    sub authors    : Attr { type => 'array' }
     sub country_id : Attr { type => 'hash' }
 
 If you specity 'array', arguments is automatically converted to array reference
@@ -1658,11 +1658,13 @@ Yuki Kimoto, C<< <kimoto.yuki at gmail.com> >>
  
 Github L<http://github.com/yuki-kimoto/>
 
-I develope this module at 
+I develope this module at L<http://github.com/yuki-kimoto/object-simple>
+
+Please tell me bug if you find.
 
 =head1 Similar modules
 
-These is various class builders.
+The following is various class builders.
  
 L<Class::Accessor>,L<Class::Accessor::Fast>, L<Moose>, L<Mouse>, L<Mojo::Base>
 
