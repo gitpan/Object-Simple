@@ -5,7 +5,7 @@ use warnings;
  
 use Carp 'croak';
 
-our $VERSION = '2.0803';
+our $VERSION = '2.0901';
 
 # Meta imformation
 our $CLASS_INFOS = {};
@@ -372,16 +372,31 @@ sub call_super {
     croak("Cannot locate method '$method' via base class of $base_class");
 }
 
+# Class attributes
+sub class_attrs {
+    my $invocant = shift;
+    
+    my $class = ref $invocant || $invocant;
+    
+    return $Object::Simple::CLASS_INFOS->{$class}{class_attrs};
+}
+
 # Class attribute is exsist?
 sub exists_class_attr {
-    my ($class, $accessor_name) = @_;
-    return exists $Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}{value};
+    my ($invocant, $accessor_name) = @_;
+    
+    my $class = ref $invocant || $invocant;
+
+    return exists $Object::Simple::CLASS_INFOS->{$class}{class_attrs}{$accessor_name};
 }
 
 # Delete class attribute
 sub delete_class_attr {
-    my ($class, $accessor_name) = @_;
-    return delete $Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}{value};
+    my ($invocant, $accessor_name) = @_;
+
+    my $class = ref $invocant || $invocant;
+
+    return delete $Object::Simple::CLASS_INFOS->{$class}{class_attrs}{$accessor_name};
 }
 
 package Object::Simple::Functions;
@@ -702,7 +717,7 @@ sub create_accessor {
     my $strage;
     if ($accessor_type eq 'ClassAttr') {
         # Strage package Varialbe in case class accessor
-        $strage = "\$Object::Simple::CLASS_INFOS->{\$self}{accessors}{'$accessor_name'}{value}";
+        $strage = "\$Object::Simple::CLASS_INFOS->{\$self}{class_attrs}{'$accessor_name'}";
         $code .=
                 qq/    Carp::croak("${class}::$accessor_name must be called from class, not instance")\n/ .
                 qq/      if ref \$self;\n/;
@@ -1099,7 +1114,7 @@ writing new and accessors repeatedly.
     sub author  : Attr { default => 'taro' }
     
     # Default value (reference)
-    sub persons : Attr { default => sub { ['taro', 'ken'] } }
+    sub persons : Attr { default => sub {['taro', 'ken']} }
     
     # Automatically build
     sub author  : Attr { auto_build => sub {
@@ -1124,7 +1139,7 @@ writing new and accessors repeatedly.
     sub url : Attr { convert => 'URI' }
     sub url : Attr { convert => sub{ ref $_[0] ? $_[0] : URI->new($_[0]) } }
     
-    # Derefference of returned value
+    # Dereference return value
     sub authors    : Attr { type => 'array', deref => 1 }
     sub country_id : Attr { type => 'hash',  deref => 1 }
     
@@ -1149,7 +1164,7 @@ writing new and accessors repeatedly.
     
     # Inheritance
     package Magazine;
-    use Object::Simple( base => 'Book' );
+    use Object::Simple(base => 'Book');
     
     # Mixin
     package Book;
@@ -1159,7 +1174,6 @@ writing new and accessors repeatedly.
             'Object::Simple::Mixin::AttrOptions'
         ]
     );
-    
 
 =cut
  
@@ -1167,27 +1181,19 @@ writing new and accessors repeatedly.
  
 =head2 new
 
-    # New (receive hash)
-    $self = $class->new($key1 => $val1, $key1 => $val2, ...);
-    
-    # Sample
-    my $book = Book->new(title => 'Perl', author => 'Taro', price => 200);
-    
-    
-    # New (recieve hash reference)
-    $self = $class->new({$key1 => $val1, $key1 => $val2, ...});
-    
-    # Sample
-    my $book = Book->new({title => 'Perl', author => 'Taro', price => 200});
+Object::Simple prepare 'new' method for subclass.
+So you do not have to define 'new'.
+'new' can receive hash or hash reference
 
-Object::Simple have new method. so you do not defined new method by yourself.
-new can receive hash or hash reference
+    $book = Book->new(title => 'Good life', author => 'Ken', price => 200);
+    $book = Book->new({title => 'Good life', author => 'Ken', price => 200});
 
-You can also override new
+You can also override 'new' for initialize or arrange of arguments.
 
-    # Add initialize process
+The following is initializing sample.
+
     sub new {
-        my $self = shift->Object::Simple::new(@_);
+        my $self = shift->SUPER::new(@_);
         
         $self->initialize;
         
@@ -1197,71 +1203,105 @@ You can also override new
     sub initialize {
         my $self = shift;
         
-        # Initialize
+        # write what you want
     }
     
-    
-    # Arrange arguments
+The following is arange of argument sample
+
     sub new {
         my ($class, $title, $author) = @_;
-        my $self = $class->Object::Simple::new(title => $title,
-                                               author => $author);
+        
+        # Arrange arguments
+        my $self = $class->SUPER::new(title => $title, author => $author);
         
         return $self;
     }
  
 =head2 build_class
 
-    # Build caller class (This is general way)
+You must call build_class at end of script. Class is build completely by this method.
+
     Object::Simple->build_class;
-    
-    # Build specify class
-    Object::Simple->build_class($class);
 
-build_class must be called end of your module.
-
-When build_class is called, your module is setuped.
+The following processes is excuted.
 
     1. Inherit base class
-    2. Inculde mixin classes methods
+    2. Include mixin classes
     3. Create accessors
     4. Create constructor
+
+You can specify class name if you need.
+
+    Object::Simple->build_class($class);
+
+=head2 class_attrs
+
+Get class attributes
+
+    $class_attrs = $class->class_attrs;
     
-If You do not pass class name to build_class, caller class is build.
+If you want to delete class attribute or check existents of class attribute
+You can use this method
 
-=head2 exists_class_attr
+    delete $class->class_attrs->{title};
+    exists $class->class_attrs->{title};
+
+=head2 call_super
+
+Call method of super class.
+
+    $self->call_super('initialize');
+
+You can call method of super class. but the method is not one of real super class.
+Method is searched by using the follwoing order.
+
+     +-------------+
+   3 | BaseClass   | # real super class
+     +-------------+
+           |
+     +-------------+
+   2 | MixinClass1 |
+     +-------------+
+           |
+     +-------------+
+   1 | MixinClass2 |
+     +-------------+
+           |
+     +-------------+
+     | ThisClass   |
+     +-------------+
+
+If 'Mixin class2' has 'initialize' method, the method is called.
+
+=head2 call_mixin
+
+Call a method of mixined class
+
+    $self->call_mixin('MixinClass1', 'initialize');
+
+You can call any method of mixin class, even if method is not imported to your class
+
+=head2 mixin_methods
     
-    # Check existence of class attribute
-    $class->exists_class_attr($attr);
+Get all same name methods of mixin classes
+
+    my $methods = $self->mixin_methods('initialize');
+
+You can call all methods of mixined classes as the following way.
+
+    foreach my $method (@$methods) {
+        $self->$method();
+    }
     
-    # Sample
-    $class->exists_class_attr('title');
-
-This is different from checking class attribute is defined or not.
-
-    defined $class->title;              # check title class attribute is defined
-    $class->exists_class_attr('title'); # check title class attribute is exist
-
-=head2 delete_class_attr
-
-    # Delete class attribute
-    $class->delete_class_attr($attr);
-    
-    # Sample
-    $class->delete_class_attr('title');
-
-This is different from setting undef to class attribute
-
-    $class->title(undef);                # set undef to title class attribute
-    $class->delete_class_attr('title');  # delete title class attribute
-
 =head2 resist_accessor_info
 
-    # Resit accessor infomation
+You can resist accessor informations.
+
     Object::Simple->resist_accessor_info($class, $accessor_name, 
                                          $accessor_options, $accessor_type);
-    
-    # Sample
+
+The following is arguments sample
+
     Object::Simple->resist_accessor_info('Book', 'title', {default => 1}, 'Attr');
 
 This is equal to
@@ -1269,51 +1309,10 @@ This is equal to
     package Book;
     sub title : Attr {default => 1}
 
-resist_accessor_info only resist accessor infomation.
-If you want to create accessor, you must call build_class
+This method only resist accessor infomation.
+If you want to build class, you must call 'build_class'
 
     Object::Simple->build_class('Book');
-
-=head2 call_mixin
-
-    # Call method of mixin class
-    $self->call_mixin($mixin_class, $method_name);
-
-You can call any method of mixin class, even if method is not import to your class
-
-=head2 mixin_methods
-    
-    # Get all same name method of mixin classes
-    my $methods = $self->mixin_methods($method_name);
-    
-    # Call all method
-    foreach my $method (@$methods) {
-        $self->$method(@args);
-    }
-    
-=head2 call_super
-
-    # Call method of super class
-    $self->call_super($method_name);
-
-You can call method of super class. but this method do not call method of real super class.
-Method is serched by using the follwoing order.
-
-     +--------------+
-   3 | Base class   | # real super class
-     +--------------+
-           |
-     +--------------+
-   2 | Mixin class1 |
-     +--------------+
-           |
-     +--------------+
-   1 | Mixin class2 |
-     +--------------+
-           |
-     +--------------+
-     | This class   |
-     +--------------+
 
 =head1 Accessor options
  
@@ -1453,12 +1452,14 @@ If you overwrite only default value, do the following
 This accessor options is only used 
 when accessor type is 'ClassAttr', or 'ClassObjectAttr'.
 
-    # Initialize Class attribute or Object attribute
+Initialize Class attribute or Object attribute
+
     sub method : ClassObjectAttr {
         initialize => {clone => $clone_method, default => $default_value }
     }
     
-    # Sample
+Sample
+
     sub constraints : ClassObjectAttr {
         initialize => {clone => 'hash', default => sub { {} } }; 
     }
@@ -1469,14 +1470,16 @@ and class attribute is cloned when invacant is object
 
 'clone' option must be specified.The following is clone options
 
-    # clone option
+The following is clone options
+
     1. 'scalar'     # Normal copy
     2. 'array'      # array ref shallow copy : sub{ [@{shift}] }
     3. 'hash'       # hash ref shallow copy  : sub{ {%{shift}} }
     4. code ref     # your clone method, for exsample : 
                     #   sub { shift->clone }
-    
-    # Samples
+
+Samples
+
     clone => 'scalar'
     clone => 'array'
     clone => 'hash'
@@ -1484,10 +1487,9 @@ and class attribute is cloned when invacant is object
 
 'default' must be scalar or code ref
 
-    # Sapmles
     default => 'good life' # scalar 
-    default => sub { [] }  # array ref
-    default => sub { {} }  # hash
+    default => sub {[]}  # array ref
+    default => sub {{}}  # hash
 
 =head1 Special accessors
 
@@ -1495,7 +1497,6 @@ and class attribute is cloned when invacant is object
 
 You can also define accessor for class variable.
 
-    # class attribute accessor
     sub options : ClassAttr {
         type => 'array',
         auto_build => sub { shift->options([]) }
@@ -1631,14 +1632,13 @@ If you use your MODIFY_CODE_ATTRIBUTES subroutine, do 'no Object::Simple;'
            mixins           [$mixin1, $mixin2]
            mixin            $mixin  methods  $method
            methods          $method derive
+           class_attrs
            constructor      $constructor
            
            accessors        $accessor   type     $type
-                                        value    $value
                                         options  {default => $default, ..}
            
            marged_accessors $accessor   type     $type
-                                        value    $value
                                         options  {default => $default, ..}
 
 This variable structure will be change. so You shoud not access this variable.
@@ -1652,6 +1652,50 @@ You can create custamizable module easy way.
 
 L<Validator::Custom>, L<DBIx::Custom>
 
+=head1 Discoraged options and methods
+
+The following options and methods are discuraged now.
+
+Do not use these. This will be removed in future.
+
+=head2 Translate accessor option
+
+Translate accessor is discuraged now, because it is a little complex for reader
+
+    sub attr : Translate { target => 'aaa' }
+
+=head2 Output accessor options
+
+Output accessor is discuraged now, because it is a little complex for reader
+
+    sub attr : Output { target => 'aaa' }
+
+=head2 exists_class_attr methods
+    
+Check existence of class attribute
+
+    $class->exists_class_attr($attr);
+
+This is discuraged now. instead, you write this
+    
+    exists $class->class_attrs->{$attr};
+
+=head2 delete_class_attr methods
+
+Delete class attribute
+
+    $class->delete_class_attr($attr);
+
+This is discuraged now. instead, you write this
+
+    delete $class->class_attrs->{$attr};
+
+=head1 Similar modules
+
+The following is various class builders.
+ 
+L<Class::Accessor>,L<Class::Accessor::Fast>, L<Moose>, L<Mouse>, L<Mojo::Base>
+
 =head1 Author
  
 Yuki Kimoto, C<< <kimoto.yuki at gmail.com> >>
@@ -1661,18 +1705,6 @@ Github L<http://github.com/yuki-kimoto/>
 I develope this module at L<http://github.com/yuki-kimoto/object-simple>
 
 Please tell me bug if you find.
-
-=head1 Similar modules
-
-The following is various class builders.
- 
-L<Class::Accessor>,L<Class::Accessor::Fast>, L<Moose>, L<Mouse>, L<Mojo::Base>
-
-=head1 CAUTION
-
-Translate and Output accessor will be deleted in future.
-
-Please do not use Translate and Output accessor
 
 =head1 Copyright & license
  
