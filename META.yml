@@ -1,6 +1,6 @@
 ---
 name: Object-Simple
-version: 2.0901
+version: 2.1001
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
 abstract: Simple class builder
@@ -14,9 +14,13 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 2.0901
-  Object::Simple::Functions:
-    file: lib/Object/Simple.pm
+    version: 2.1001
+  Object::Simple::Accessor:
+    file: lib/Object/Simple/Accessor.pm
+  Object::Simple::Base:
+    file: lib/Object/Simple/Base.pm
+  Object::Simple::Util:
+    file: lib/Object/Simple/Util.pm
 generated_by: Module::Build version 0.31012
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html

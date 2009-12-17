@@ -1,14 +1,15 @@
 package Object::Simple;
 use 5.008_001;
+
 use strict;
 use warnings;
- 
 use Carp 'croak';
 
-our $VERSION = '2.0901';
+use Object::Simple::Util;
+use constant Util => 'Object::Simple::Util';
 
 # Meta imformation
-our $CLASS_INFOS = {};
+our $CLASS_INFOS;
 
 # Classes which need to build
 our @BUILD_NEED_CLASSES;
@@ -27,7 +28,7 @@ sub import {
     my ($self, %options) = @_;
     
     # Shortcut
-    return unless $self eq 'Object::Simple';
+    return unless $self eq __PACKAGE__;
     
     # Get caller class
     my $caller_class = caller;
@@ -39,17 +40,17 @@ sub import {
     }
     
     # Resist base class to meta information
-    $Object::Simple::CLASS_INFOS->{$caller_class}{base} = $options{base};
+    Util->class_infos->{$caller_class}{base} = $options{base};
     
     # Regist mixin classes to meta information
-    $Object::Simple::CLASS_INFOS->{$caller_class}{mixins} = $options{mixins};
+    Util->class_infos->{$caller_class}{mixins} = $options{mixins};
     
     # Adapt strict and warnings pragma to caller class
     strict->import;
     warnings->import;
     
     # Define MODIFY_CODE_ATTRIBUTES subroutine of caller class
-    Object::Simple::Functions::define_MODIFY_CODE_ATTRIBUTES($caller_class);
+    Util->define_MODIFY_CODE_ATTRIBUTES($caller_class);
     
     # Push classes which need build
     push @BUILD_NEED_CLASSES, $caller_class;
@@ -75,17 +76,20 @@ sub new {
     # Convert to class name
     my $class = ref $invocant || $invocant;
     
+    # Class infos
+    my $class_infos = Util->class_infos;
+    
     # Call constructor
-    return $CLASS_INFOS->{$class}{constructor}->($class,@_)
-        if $CLASS_INFOS->{$class}{constructor};
+    return $class_infos->{$class}{constructor}->($class,@_)
+        if $class_infos->{$class}{constructor};
     
     # Search super class constructor if constructor is not resited
-    foreach my $super_class (@{Object::Simple::Functions::get_leftmost_isa($class)}) {
-        if($CLASS_INFOS->{$super_class}{constructor}) {
-            $CLASS_INFOS->{$class}{constructor}
-              = $CLASS_INFOS->{$super_class}{constructor};
+    foreach my $super_class (@{Util->get_leftmost_isa($class)}) {
+        if($class_infos->{$super_class}{constructor}) {
+            $class_infos->{$class}{constructor}
+              = $class_infos->{$super_class}{constructor};
             
-            return $CLASS_INFOS->{$class}{constructor}->($class,@_);
+            return $class_infos->{$class}{constructor}->($class,@_);
         }
     }
 }
@@ -102,6 +106,9 @@ sub build_all_classes {
 # Build class
 sub build_class {
     my ($self, $options) = @_;
+    
+    # Class infos
+    my $class_infos = Util->class_infos;
     
     # passed class name
     unless (ref $options) {
@@ -124,7 +131,7 @@ sub build_class {
     }
     
     # Parse symbol table and create accessors code
-    while (my $accessor_info = shift @Object::Simple::ACCESSOR_INFOS) {
+    while (my $accessor_info = shift @ACCESSOR_INFOS) {
         # CODE_ATTRIBUTE infomation
         my ($class, $accessor_options, $accessor_type, $accessor_name) = @$accessor_info;
         
@@ -149,12 +156,11 @@ sub build_class {
                           : {@accessor_options};
         
         # Check accessor option
-        Object::Simple::Functions::check_accessor_option($accessor_name, 
-                                                         $class, $accessor_options,
-                                                         $accessor_type);
+        Util->check_accessor_option($accessor_name, $class, $accessor_options,
+                                     $accessor_type);
         
         # Resist accessor type and accessor options
-        @{$Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}}{qw/type options/}
+        @{$class_infos->{$class}{accessors}{$accessor_name}}{qw/type options/}
           = ($accessor_type, $accessor_options);
     }
     
@@ -163,17 +169,17 @@ sub build_class {
     if ($options->{all}) {
         # Select build needing class
         @build_need_classes = grep {!$ALREADY_BUILD_CLASSES{$_}}
-                                   @Object::Simple::BUILD_NEED_CLASSES;
+                                   @BUILD_NEED_CLASSES;
         
         # Clear BUILD_NEED_CLASSES
-        @Object::Simple::BUILD_NEED_CLASSES = ();
+        @BUILD_NEED_CLASSES = ();
     }
     else{
         @build_need_classes = ($build_need_class)
           unless $ALREADY_BUILD_CLASSES{$build_need_class};
     }
     
-    # Inherit base class and Object::Simple, and include mixin classes
+    # Inherit base class and this package, and include mixin classes
     foreach my $class (@build_need_classes) {
         # Delete MODIFY_CODE_ATTRIBUTES
         {
@@ -183,7 +189,7 @@ sub build_class {
         
         # Inherit base class
         no strict 'refs';
-        if( my $base_class = $Object::Simple::CLASS_INFOS->{$class}{base}) {
+        if( my $base_class = $class_infos->{$class}{base}) {
             @{"${class}::ISA"} = ();
             push @{"${class}::ISA"}, $base_class;
             
@@ -196,84 +202,78 @@ sub build_class {
             }
         }
         
-        # Inherit Object::Simple
-        push @{"${class}::ISA"}, 'Object::Simple';
+        # Inherit this package
+        push @{"${class}::ISA"}, __PACKAGE__;
         
         # Include mixin classes
-        Object::Simple::Functions::include_mixin_classes($class)
-            if $Object::Simple::CLASS_INFOS->{$class}{mixins};
+        Util->include_mixin_classes($class)
+          if $class_infos->{$class}{mixins};
     }
 
     # Create constructor and resist accessor code
     foreach my $class (@build_need_classes) {
-        my $accessors = $Object::Simple::CLASS_INFOS->{$class}{accessors};
+        my $accessors = $class_infos->{$class}{accessors};
         foreach my $accessor_name (keys %$accessors) {
             
             # Extend super class accessor options
             my $base_class = $class;
-            while ($Object::Simple::CLASS_INFOS->{$base_class}{accessors}{$accessor_name}{options}{extend}) {
+            while ($class_infos->{$base_class}{accessors}{$accessor_name}{options}{extend}) {
                 my ($super_accessor_options, $accessor_found_class)
-                  = Object::Simple::Functions::get_super_accessor_options($base_class, $accessor_name);
+                  = Util->get_super_accessor_options($base_class, $accessor_name);
                 
-                delete $Object::Simple::CLASS_INFOS->{$base_class}{accessors}{$accessor_name}{options}{extend};
+                delete $class_infos->{$base_class}{accessors}{$accessor_name}{options}{extend};
                 
                 last unless $super_accessor_options;
                 
-                $Object::Simple::CLASS_INFOS->{$base_class}{accessors}{$accessor_name}{options}
+                $class_infos->{$base_class}{accessors}{$accessor_name}{options}
                   = {%{$super_accessor_options}, 
-                     %{$Object::Simple::CLASS_INFOS->{$base_class}{accessors}{$accessor_name}{options}}};
+                     %{$class_infos->{$base_class}{accessors}{$accessor_name}{options}}};
                 
                 $base_class = $accessor_found_class;
             }
             
-            my $accessor_type = $accessors->{$accessor_name}{type};
+            my $accessor_type = $accessors->{$accessor_name}{type} || 'Attr';
             
-            # Create accessor source code
-            if ($accessor_type eq 'Translate') {
-                ### Translate accessor will be deleted in future ###
-                # Create translate accessor
-                $accessor_code 
-                  .= "package $class;\nsub $accessor_name " 
-                  . Object::Simple::Functions::create_translate_accessor($class, $accessor_name);
-            }
-            elsif ($accessor_type eq 'Output') {
-                ### Output accessor will be deleted in future ###
-                # Create output accessor
-                $accessor_code
-                  .= "package $class;\nsub $accessor_name " 
-                  . Object::Simple::Functions::create_output_accessor($class, $accessor_name);
-            }
-            elsif ($accessor_type eq 'ClassObjectAttr') {
-                # Create class and object hibrid accessor
-                $accessor_code
-                  .= Object::Simple::Functions::create_class_object_accessor($class, $accessor_name);
-            }
-            else {
-                # Create normal accessor or class accessor
-                $accessor_code
-                  .= "package $class;\nsub $accessor_name " 
-                  . Object::Simple::Functions::create_accessor($class, $accessor_name, $accessor_type);
-            }
+            my $options = $class_infos->{$base_class}{accessors}{$accessor_name}{options};
+            
+            my $code = $accessor_type eq 'Attr'
+                     ? Util->create_accessor($class, $accessor_name, $options)
+
+                     : $accessor_type eq 'ClassAttr' 
+                     ? Util->create_class_accessor($class, $accessor_name, $options)
+
+                     : $accessor_type eq 'HybridAttr' 
+                     ? Util->create_hybrid_accessor($class, $accessor_name, $options)
+                     
+                     # (Deprecated)
+                     : $accessor_type eq 'ClassObjectAttr' 
+                     ? Util->create_hybrid_accessor($class, $accessor_name, $options)
+                     
+                     # (Deprecated)
+                     : $accessor_type eq 'Output' 
+                     ? Util->create_output_accessor($class, $accessor_name, $options)
+                     
+                     # (Deprecated)
+                     : $accessor_type eq 'Translate'
+                     ? Util->create_translate_accessor($class, $accessor_name, $options)
+                     
+                     : undef;
+
+            no strict 'refs';
+            no warnings qw(redefine);
+            *{"${class}::$accessor_name"} = $code;
         }
-    }
-    
-    # Create accessor
-    if($accessor_code){
-        no warnings qw(redefine);
-        eval $accessor_code;
-        croak("$accessor_code\n:$@") if $@; # never occured
     }
     
     # Create constructor
     foreach my $class (@build_need_classes) {
-        my $constructor_code
-          = Object::Simple::Functions::create_constructor($class);
+        my $constructor_code = Util->create_constructor($class);
         
         eval $constructor_code;
         croak("$constructor_code\n:$@") if $@; # never occured
         
-        $Object::Simple::CLASS_INFOS->{$class}{constructor}
-          = \&{"Object::Simple::Constructor::${class}::new"};
+        $class_infos->{$class}{constructor}
+          = \&{"Object::Simple::Constructors::${class}::new"};
     }
     
     # Resist already build class
@@ -284,8 +284,7 @@ sub build_class {
 
 # Resit accessor information
 sub resist_accessor_info {
-    shift;
-    my ($class, $accessor_name, $accessor_options, $accessor_type) = @_;
+    my ($self, $class, $accessor_name, $accessor_options, $accessor_type) = @_;
     
     # Rearrange accessor options
     my $accessor_options_  = ref $accessor_options eq 'HASH'
@@ -296,7 +295,7 @@ sub resist_accessor_info {
     $accessor_type ||= 'Attr';
     
     # Add accessor info
-    push @Object::Simple::ACCESSOR_INFOS,
+    push @ACCESSOR_INFOS, 
          [$class, $accessor_options_, $accessor_type, $accessor_name];
 }
 
@@ -306,14 +305,17 @@ sub call_mixin {
     my $mixin_class = shift || '';
     my $method      = shift || '';
     
+    # Class infos
+    my $class_infos = Util->class_infos;
+    
     # Caller class
     my $caller_class = caller;
     
     # Method not exist
     croak(qq/"${mixin_class}::$method from $caller_class" is not exist/)
-      unless $Object::Simple::CLASS_INFOS->{$caller_class}{mixin}{$mixin_class}{methods}{$method};
+      unless $class_infos->{$caller_class}{mixin}{$mixin_class}{methods}{$method};
     
-    return $Object::Simple::CLASS_INFOS->{$caller_class}{mixin}{$mixin_class}{methods}{$method}->($self, @_);
+    return $class_infos->{$caller_class}{mixin}{$mixin_class}{methods}{$method}->($self, @_);
 }
 
 # Get mixin methods
@@ -322,12 +324,15 @@ sub mixin_methods {
     my $method       = shift || '';
     my $caller_class = caller;
     
+    # Class infos
+    my $class_infos = Util->class_infos;
+    
     my $methods = [];
-    foreach my $mixin_class (@{$Object::Simple::CLASS_INFOS->{$caller_class}{mixins}}) {
+    foreach my $mixin_class (@{$class_infos->{$caller_class}{mixins}}) {
         
         push @$methods,
-             $Object::Simple::CLASS_INFOS->{$caller_class}{mixin}{$mixin_class}{methods}{$method}
-          if $Object::Simple::CLASS_INFOS->{$caller_class}{mixin}{$mixin_class}{methods}{$method};
+             $class_infos->{$caller_class}{mixin}{$mixin_class}{methods}{$method}
+          if $class_infos->{$caller_class}{mixin}{$mixin_class}{methods}{$method};
     }
     return $methods;
 }
@@ -346,15 +351,18 @@ sub call_super {
     }
     $base_class  ||= caller;
     
+    # Class info
+    my $class_infos = Util->class_infos;
+    
     # Call last mixin method
     my $mixin_found = $mixin_base_class ? 0 : 1;
-    if ($Object::Simple::CLASS_INFOS->{$base_class}{mixins}) {
-        foreach my $mixin_class (reverse @{$Object::Simple::CLASS_INFOS->{$base_class}{mixins}}) {
+    if ($class_infos->{$base_class}{mixins}) {
+        foreach my $mixin_class (reverse @{$class_infos->{$base_class}{mixins}}) {
             if ($mixin_base_class && $mixin_base_class eq $mixin_class) {
                 $mixin_found = 1;
             }
-            elsif ($mixin_found && $Object::Simple::CLASS_INFOS->{$base_class}{mixin}{$mixin_class}{methods}{$method}) {
-                return $Object::Simple::CLASS_INFOS->{$base_class}{mixin}{$mixin_class}{methods}{$method}->($self, @_);
+            elsif ($mixin_found && $class_infos->{$base_class}{mixin}{$mixin_class}{methods}{$method}) {
+                return $class_infos->{$base_class}{mixin}{$mixin_class}{methods}{$method}->($self, @_);
             }
         }
     }
@@ -372,710 +380,23 @@ sub call_super {
     croak("Cannot locate method '$method' via base class of $base_class");
 }
 
-# Class attributes
-sub class_attrs {
-    my $invocant = shift;
-    
-    my $class = ref $invocant || $invocant;
-    
-    return $Object::Simple::CLASS_INFOS->{$class}{class_attrs};
-}
-
-# Class attribute is exsist?
-sub exists_class_attr {
-    my ($invocant, $accessor_name) = @_;
-    
-    my $class = ref $invocant || $invocant;
-
-    return exists $Object::Simple::CLASS_INFOS->{$class}{class_attrs}{$accessor_name};
-}
-
-# Delete class attribute
-sub delete_class_attr {
-    my ($invocant, $accessor_name) = @_;
-
-    my $class = ref $invocant || $invocant;
-
-    return delete $Object::Simple::CLASS_INFOS->{$class}{class_attrs}{$accessor_name};
-}
-
-package Object::Simple::Functions;
-use strict;
-use warnings;
-use Carp 'croak';
-
-# Get leftmost self and parent classes
-sub get_leftmost_isa {
-    my $class = shift;
-    my @leftmost_isa;
-    
-    # Sortcut
-    return unless $class;
-    
-    my $leftmost_parent = $class;
-    push @leftmost_isa, $leftmost_parent;
-    no strict 'refs';
-    while( $leftmost_parent = ${"${leftmost_parent}::ISA"}[0] ) {
-        push @leftmost_isa, $leftmost_parent;
-    }
-    
-    return \@leftmost_isa;
-}
-
-# Get upper accessor options
-sub get_super_accessor_options {
-    my ($class, $accessor_name) = @_;
-    
-    # Base class
-    my $base_class = $class;
-    
-    # Get super class accessor option 
-    no strict 'refs';
-    while($base_class = ${"${base_class}::ISA"}[0]) {
-        return ($Object::Simple::CLASS_INFOS->{$base_class}{accessors}{$accessor_name}{options}, $base_class)
-          if $Object::Simple::CLASS_INFOS->{$base_class}{accessors}{$accessor_name}{options};
-    }
-    
-    # Not found
-    return;
-}
-
-# Include mixin classes
-sub include_mixin_classes {
-    my $caller_class = shift;
-    
-    # Get mixin classes
-    my $mixin_classes = $Object::Simple::CLASS_INFOS->{$caller_class}{mixins};
-    
-    croak("mixins must be array reference ($caller_class)") 
-      unless ref $mixin_classes eq 'ARRAY';
-    
-    # Mixin class accessor options
-    my $mixins_accessor_options = {};
-    
-    # Deparse object
-    my $deparse;
-    
-    # Include mixin classes
-    no warnings 'redefine';
-    foreach my $mixin_class (reverse @$mixin_classes) {
-        croak("Mixin class '$mixin_class' is invalid class name ($caller_class)")
-          if $mixin_class =~ /[^\w:]/;
-        
-        unless($mixin_class->can('isa')) {
-            eval "require $mixin_class;";
-            croak("$@") if $@;
-        }
-        
-        my $deparse_possibility
-          = Object::Simple::Functions::mixin_method_deparse_possibility($mixin_class);
-        
-        my $deparse;
-        if ($deparse_possibility) {
-            require B::Deparse;
-            $deparse ||= B::Deparse->new;
-        }
-        
-        # Import all methods
-        no strict 'refs';
-        foreach my $method ( keys %{"${mixin_class}::"} ) {
-            next unless defined &{"${mixin_class}::$method"};
-            
-            my $derive_class
-              = $Object::Simple::CLASS_INFOS->{$mixin_class}{methods}{$method}{derive};
-            
-            my $deparse_method = $derive_class
-                               ? \&{"${derive_class}::$method"}
-                               : \&{"${mixin_class}::$method"};
-            
-            my $code_ref;
-            if ($deparse_possibility) {
-                my $code = $deparse->coderef2text($deparse_method);
-                $code =~ /^{\s*package\s+(.+?)\s*;/;
-                my $package = $1 || '';
-                
-                if ((($derive_class && $package eq $derive_class) || $package eq $mixin_class)
-                  && $code =~ /->SUPER::/) 
-                {
-                    $code =~ s/->SUPER::(.+?)\(/->Object::Simple::call_super([ '$1', '$caller_class', '$mixin_class'], /smg;
-                    $code_ref = eval "sub $code";
-                    croak("Code copy error : \n $code\n $@") if $@;
-                }
-                else {
-                    $code_ref = \&{"${mixin_class}::$method"};
-                }
-            }
-            else {
-                $code_ref = \&{"${mixin_class}::$method"};
-            }
-            
-            $Object::Simple::CLASS_INFOS->{$caller_class}{mixin}{$mixin_class}{methods}{$method} = $code_ref;
-            
-            next if defined &{"${caller_class}::$method"};
-            *{"${caller_class}::$method"} = $code_ref;
-            $Object::Simple::CLASS_INFOS->{$caller_class}{methods}{$method}{derive} = 
-              $Object::Simple::CLASS_INFOS->{$mixin_class}{methods}{$method}{derive} || $mixin_class;
-        }
-    }
-    
-    # Merge accessor to caller class
-    my %accessors;
-    foreach my $class (@$mixin_classes, $caller_class) {
-        %accessors = (%accessors, %{$Object::Simple::CLASS_INFOS->{$class}{accessors}})
-            if $Object::Simple::CLASS_INFOS->{$class}{accessors};
-    }
-    $Object::Simple::CLASS_INFOS->{$caller_class}{accessors} = \%accessors;
-}
-
-sub mixin_method_deparse_possibility {
-    my $mixin_class = shift;
-    
-    # Has mixin classes
-    return 1
-      if ref $Object::Simple::CLASS_INFOS->{$mixin_class}{mixins} &&
-         @{$Object::Simple::CLASS_INFOS->{$mixin_class}{mixins}};
-    
-    # Call SUPER method
-    my $module_path = join('/', split(/::/, $mixin_class)) . '.pm';
-    my $module_file = $INC{$module_path};
-    if ($module_file && -r $module_file) {
-        # Open
-        open my $fh, "<", $module_file
-          or return 1;
-        
-        # Slurp
-        local $/;
-        my $content = <$fh>;
-        
-        if (index($content, '->SUPER::') == -1) {
-            return 0;
-        }
-    }
-    return 1;
-}
- 
-# Merge self and super accessor option
-sub merge_self_and_super_accessors {
-    
-    my $class = shift;
-    
-    # Return cache if cached 
-    return $Object::Simple::CLASS_INFOS->{$class}{merged_accessors}
-      if $Object::Simple::CLASS_INFOS->{$class}{merged_accessors};
-    
-    # Get self and super classed
-    my $self_and_super_classes
-      = Object::Simple::Functions::get_leftmost_isa($class);
-    
-    # Get merged accessor options 
-    my $accessors = {};
-    foreach my $class (reverse @$self_and_super_classes) {
-        $accessors = {%{$accessors}, %{$Object::Simple::CLASS_INFOS->{$class}{accessors}}}
-            if defined $Object::Simple::CLASS_INFOS->{$class}{accessors};
-    }
-    
-    # Cached
-    $Object::Simple::CLASS_INFOS->{$class}{merged_accessors} = $accessors;
-    
-    return $accessors;
-}
-
-# Create constructor
-sub create_constructor {
-    my $class = shift;
-    
-    # Get merged accessors
-    my $accessors = merge_self_and_super_accessors($class);
-    my $object_accessors = {};
-    my $translate_accessors = {};
-    
-    # Attr or Transalte
-    foreach my $accessor (keys %$accessors) {
-        my $accessor_type = $accessors->{$accessor}{type} || '';
-        if ($accessor_type eq 'Attr' || $accessor_type eq 'ClassObjectAttr') {
-            $object_accessors->{$accessor} = $accessors->{$accessor};
-        }
-        elsif ($accessor_type eq 'Translate') {
-            $translate_accessors->{$accessor} = $accessors->{$accessor};
-        }
-    }
-    
-    # Create instance
-    my $code =  qq/package Object::Simple::Constructor::${class};\n/ .
-                qq/sub new {\n/ .
-                qq/    my \$class = shift;\n/ .
-                qq/    my \$self = !(\@_ % 2)           ? {\@_}       :\n/ .
-                qq/               ref \$_[0] eq 'HASH' ? {\%{\$_[0]}} :\n/ .
-                qq/                                     {\@_, undef};\n/ .
-                qq/    bless \$self, \$class;\n/;
-    
-    # Attribute which have trigger option
-    my @accessors_having_trigger;
-    
-    # Customize initialization
-    foreach my $accessor_name (keys %$object_accessors) {
-        
-        # Convert option
-        if ($accessors->{$accessor_name}{options}{convert}) {
-            if(ref $accessors->{$accessor_name}{options}{convert} eq 'CODE') {
-                $code .=
-                qq/    \$self->{'$accessor_name'} = \$Object::Simple::CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{convert}->(\$self->{'$accessor_name'})\n/ .
-                qq/        if exists \$self->{'$accessor_name'};\n/;
-            }
-            else {
-                require Scalar::Util;
-                
-                my $convert = $accessors->{$accessor_name}{options}{convert};
-                $code .=
-                qq/    require $convert;\n/ .
-                qq/    \$self->{'$accessor_name'} = $convert->new(\$self->{'$accessor_name'}) if defined \$self->{'$accessor_name'} && !Scalar::Util::blessed(\$self->{'$accessor_name'});\n/;
-            }
-        }
-        
-        # Default option
-        if(defined $accessors->{$accessor_name}{options}{default}) {
-            if(ref $accessors->{$accessor_name}{options}{default} eq 'CODE') {
-                $code .=
-                qq/    \$self->{'$accessor_name'} = \$CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{default}->()\n/ .
-                qq/      unless exists \$self->{'$accessor_name'};\n/;
-            }
-            elsif(!ref $accessors->{$accessor_name}{options}{default}) {
-                $code .=
-                qq/    \$self->{'$accessor_name'} = \$CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{default}\n/ .
-                qq/      unless exists \$self->{'$accessor_name'};\n/;
-            }
-            else {
-                croak("Value of 'default' option must be a code reference or constant value(${class}::$accessor_name)");
-            }
-        }
-        
-        # Weak option
-        if($accessors->{$accessor_name}{options}{weak}) {
-            require Scalar::Util;
-            $code .=
-                qq/    Scalar::Util::weaken(\$self->{'$accessor_name'}) if ref \$self->{'$accessor_name'};\n/;
-        }
-        
-        # Regist accessoribute which have trigger option
-        push @accessors_having_trigger, $accessor_name
-            if $accessors->{$accessor_name}{options}{trigger};
-    }
-    
-    # Trigger option
-    foreach my $accessor_name (@accessors_having_trigger) {
-        $code .=
-            qq/    \$Object::Simple::CLASS_INFOS->{'$class'}{merged_accessors}{'$accessor_name'}{options}{trigger}->(\$self) if exists \$self->{'$accessor_name'};\n/;
-    }
-    
-    # Translate option
-    foreach my $accessor_name (keys %$translate_accessors) {
-        $code .=
-            qq/    \$self->$accessor_name(delete \$self->{'$accessor_name'}) if exists \$self->{'$accessor_name'};\n/;
-    }
-    
-    # Return
-    $code .=    qq/    return \$self;\n/ .
-                qq/}\n/;
-}
-
-# Valid type
-my %VALID_VARIABLE_TYPE = map {$_ => 1} qw/array hash/;
-my %VALID_INITIALIZE_OPTIONS_KEYS = map {$_ => 1} qw/clone default/;
-
-# Create accessor.
-sub create_accessor {
-    
-    my ($class, $accessor_name, $accessor_type) = @_;
-    
-    # Get accessor options
-    my ($auto_build, $read_only, $weak, $type, $convert, $deref, $trigger, $initialize)
-      = @{$Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}{options}}{
-            qw/auto_build read_only weak type convert deref trigger initialize/
-        };
-    
-    # chained
-    my $chained =   exists $Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}{options}{chained}
-                  ? $Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}{options}{chained}
-                  : 1;
-    
-    # Passed value expression
-    my $value = '$_[0]';
-    
-    # Check type
-    croak("'type' option must be 'array' or 'hash' (${class}::$accessor_name)")
-      if $type && !$VALID_VARIABLE_TYPE{$type};
-    
-    # Check deref
-    croak("'deref' option must be specified with 'type' option (${class}::$accessor_name)")
-      if $deref && !$type;
-    
-    # Beginning of accessor source code
-    my $code =  qq/{\n/ .
-                qq/    my \$self = shift;\n/;
-    
-    # Variable to strage
-    my $strage;
-    if ($accessor_type eq 'ClassAttr') {
-        # Strage package Varialbe in case class accessor
-        $strage = "\$Object::Simple::CLASS_INFOS->{\$self}{class_attrs}{'$accessor_name'}";
-        $code .=
-                qq/    Carp::croak("${class}::$accessor_name must be called from class, not instance")\n/ .
-                qq/      if ref \$self;\n/;
-    }
-    else {
-        # Strage hash in case normal accessor
-        $strage = "\$self->{'$accessor_name'}";
-    }
-    
-    # Create temporary variable if there is type or convert option
-    $code .=    qq/    my \$value;\n/ if $type || $convert;
-    
-    # Automatically call build method
-    if ($initialize) {
-        
-        # Check initialize data type
-        croak("'initialize' option must be hash reference (${class}::$accessor_name)")
-          unless ref $initialize eq 'HASH';
-        
-        # Check initialize valid key
-        foreach my $key (keys %$initialize) {
-            croak("'initialize' option must be 'clone', or 'default' (${class}::$accessor_name)")
-              unless $VALID_INITIALIZE_OPTIONS_KEYS{$key};
-        }
-        
-        # Check clone option
-        my $clone = $initialize->{clone};
-        croak("'initialize'-'clone' opiton must be 'scalar', 'array', 'hash', or code reference (${class}::$accessor_name)")
-          if !defined $clone ||
-             !($clone eq 'scalar' || $clone eq 'array' ||
-               $clone eq 'hash' || ref $clone eq 'CODE');
-        
-        # Check default option
-        croak("'initialize'-'default' option must be scalar, or code ref (${class}::$accessor_name)")
-          if exists $initialize->{default} && 
-             !(!ref $initialize->{default} || ref $initialize->{default} eq 'CODE');
-        
-        $code .=
-                qq/    if(\@_ == 0 && ! exists $strage) {\n/ .
-                qq/        Object::Simple::Functions::initialize_class_object_attr(\n/ .
-                qq/            \$self,\n/ .
-                qq/            '$accessor_name',\n/ .
-                qq/            \$Object::Simple::CLASS_INFOS->{'$class'}{accessors}{'$accessor_name'}{options}{initialize}\n/ .
-                qq/        );\n/ .
-                qq/    }\n/;
-    }
-    elsif ($auto_build){
-        $code .=
-                qq/    if(\@_ == 0 && ! exists $strage) {\n/;
-        
-        if(ref $auto_build eq 'CODE') {
-            $code .=
-                qq/        \$Object::Simple::CLASS_INFOS->{'$class'}{accessors}{'$accessor_name'}{options}{auto_build}->(\$self, {accessor_name => '$accessor_name'});\n/;
-        }
-        else {
-            my $build_method;
-            if( $accessor_name =~ s/^(_*)// ){
-                $build_method = $1 . "build_$accessor_name";
-            }
-            
-            $code .=
-                qq/        \$self->$build_method;\n/;
-        }
-        
-        $code .=
-                qq/    }\n/;
-    }
-    
-    # Read only accesor
-    if ($read_only){
-        $code .=
-                qq/    Carp::croak("${class}::$accessor_name is read only") if \@_ > 0;\n/;
-    }
-    
-    # Read and write accessor
-    else {
-        $code .=
-                qq/    if(\@_ > 0) {\n/;
-        
-        # Variable type
-        if($type) {
-            if($type eq 'array') {
-                $code .=
-                qq/        \$value = ref \$_[0] eq 'ARRAY' ? \$_[0] : !defined \$_[0] ? undef : [\@_];\n/;
-            }
-            else {
-                $code .=
-                qq/        \$value = ref \$_[0] eq 'HASH' ? \$_[0] : !defined \$_[0] ? undef : {\@_};\n/;
-            }
-            $value = '$value';
-        }
-        
-        # Convert to object;
-        if ($convert) {
-            if(ref $convert eq 'CODE') {
-                $code .=
-                qq/        \$value = \$Object::Simple::CLASS_INFOS->{'$class'}{accessors}{'$accessor_name'}{options}{convert}->($value);\n/;
-            }
-            else {
-                require Scalar::Util;
-                
-                $code .=
-                qq/        require $convert;\n/ .
-                qq/        \$value = defined $value && !Scalar::Util::blessed($value) ? $convert->new($value) : $value ;\n/;
-            }
-            $value = '$value';
-        }
-        
-        # Save old value
-        if ($trigger) {
-            $code .=
-                qq/        my \$old = $strage;\n/;
-        }
-        
-        # Set value
-        $code .=
-                qq/        $strage = $value;\n/;
-        
-        # Weaken
-        if ($weak) {
-            require Scalar::Util;
-            $code .=
-                qq/        Scalar::Util::weaken($strage) if ref $strage;\n/;
-        }
-        
-        # Trigger
-        if ($trigger) {
-            croak("'trigger' option must be code reference (${class}::$accessor_name)")
-              unless ref $trigger eq 'CODE';
-            
-            $code .=
-                qq/        \$Object::Simple::CLASS_INFOS->{'$class'}{accessors}{'$accessor_name'}{options}{trigger}->(\$self, \$old);\n/;
-        }
-        
-        # Return self if chained
-        if ($chained) {
-            $code .=
-                qq/        return \$self;\n/;
-        }
-        
-        $code .=
-                qq/    }\n/;
-    }
-    
-    # Dereference
-    if ($deref) {
-        if ($type eq 'array') {
-            $code .=
-                qq/    return wantarray ? \@{$strage} : $strage;\n/;
-        }
-        else {
-            $code .=
-                qq/    return wantarray ? \%{$strage} : $strage;\n/;
-        }
-    }
-    
-    # No dereference
-    else {
-        $code .=
-                qq/    return $strage;\n/;
-    }
-    
-    # End of accessor source code
-    $code .=    qq/}\n\n/;
-    
-    return $code;
-}
-
-# Create class and object hibrid accessor
-sub create_class_object_accessor {
-    my ($class, $accessor_name) = @_;
-    my $object_accessor = Object::Simple::Functions::create_accessor($class, $accessor_name, 'Attr');
-    $object_accessor = join("\n    ", split("\n", $object_accessor));
-    
-    my $class_accessor  = Object::Simple::Functions::create_accessor($class, $accessor_name, 'ClassAttr');
-    $class_accessor = join("\n    ", split("\n", $class_accessor));
-    
-    my $code = qq/{\n/ .
-               qq/    my \$object_accessor = sub $object_accessor;\n\n/ .
-               qq/    my \$class_accessor  = sub $class_accessor;\n\n/ .
-               qq/    package $class;\n/ .
-               qq/    sub $accessor_name {\n/ .
-               qq/        my \$invocant = shift;\n/ .
-               qq/        if (ref \$invocant) {\n/ .
-               qq/            return wantarray ? (\$object_accessor->(\$invocant, \@_))\n/ .
-               qq/                             : \$object_accessor->(\$invocant, \@_);\n/ .
-               qq/        }\n/ .
-               qq/        else {\n/ .
-               qq/            return wantarray ? (\$class_accessor->(\$invocant, \@_))\n/ .
-               qq/                             : \$class_accessor->(\$invocant, \@_);\n/ .
-               qq/        }\n/ .
-               qq/    }\n/ .
-               qq/}\n\n/;
-    return $code;
-}
-
-### Output accessor will be deleted in future ###
-# Create accessor for output
-sub create_output_accessor {
-    my ($class, $accessor_name) = @_;
-    my $target = $Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}{options}{target};
-    
-    my $code =  qq/{\n/ .
-                qq/    my (\$self, \$output) = \@_;\n/ .
-                qq/    my \$value = \$self->$target;\n/ .
-                qq/    \$\$output = \$value;\n/ .
-                qq/    return \$self\n/ .
-                qq/}\n\n/;
-                
-    return $code;
-}
-
-### Translate accessor will be deleted in future ###
-# Create accessor for delegate
-sub create_translate_accessor {
-    my ($class, $accessor_name) = @_;
-    my $target = $Object::Simple::CLASS_INFOS->{$class}{accessors}{$accessor_name}{options}{target} || '';
-    
-    croak("${class}::$accessor_name '$target' is invalid. Translate 'target' option must be like 'method1->method2'")
-      unless $target =~ /^(([a-zA-Z_][\w_]*)->)+([a-zA-Z_][\w_]*)$/;
-    
-    my $code =  qq/{\n/ .
-                qq/    my \$self = shift;\n/ .
-                qq/    if (\@_) {\n/ .
-                qq/        \$self->$target(\@_);\n/ .
-                qq/        return \$self;\n/ .
-                qq/    }\n/ .
-                qq/    return wantarray ? (\$self->$target) : \$self->$target;\n/ .
-                qq/}\n\n/;
-                
-    return $code;
-}
-
-# Initialize ClassObjectAttr
-sub initialize_class_object_attr {
-    my $invocant      = shift;
-    my $accessor_name = shift;
-    my $options = ref $_[0] eq 'HASH' ? $_[0] : {@_};
-    
-    # clone option
-    my $clone   = $options->{clone};
-    
-    # Check clone option
-    unless (ref $clone eq 'CODE') {
-        if ($clone eq 'scalar') {
-            $clone = sub {shift};
-        }
-        elsif ($clone eq 'array') {
-            $clone = sub { return [@{shift || [] }] };
-        }
-        elsif ($clone eq 'hash') {
-            $clone = sub { return { %{shift || {} } } };
-        }
-    }
-    
-    # default options
-    my $default = $options->{default};
-    
-    # get Default value when it is code ref
-    $default = $default->() if ref $default eq 'CODE';
-    
-    # Called from object
-    if (my $class = ref $invocant) {
-        $invocant->$accessor_name($clone->(scalar $class->$accessor_name));
-    }
-    else {
-        # Called from class
-        my $super =  do {
-            no strict 'refs';
-            ${"${invocant}::ISA"}[0];
-        };
-        my $value = eval{$super->can($accessor_name)}
-                       ? $clone->(scalar $super->$accessor_name)
-                       : $default;
-                          
-        $invocant->$accessor_name($value);
-    }
-}
-
-
-# Valid accessor options(Attr)
-my %VALID_OBJECT_ACCESSOR_OPTIONS 
-  = map {$_ => 1} qw(default chained weak read_only auto_build type convert deref trigger translate extend);
-
-# Valid class accessor options(ClassAttr)
-my %VALID_CLASS_ACCESSOR_OPTIONS
-  = map {$_ => 1} qw(chained weak read_only auto_build type convert deref trigger translate extend initialize);
-
-# Valid class accessor options(ClassAttr)
-my %VALID_CLASS_OBJECT_ACCESSOR_OPTIONS
-  = map {$_ => 1} qw(chained weak read_only auto_build type convert deref trigger translate extend initialize);
-
-### Output accessor will be deleted in future ###
-# Valid class output accessor options(Output)
-my %VALID_OUTPUT_OPTIONS
-  = map {$_ => 1} qw(target);
-
-### Translate accessor will be deleted in future ###
-# Valid translate accessor option(Translate)
-my %VALID_TRANSLATE_OPTIONS
-  = map {$_ => 1} qw(target);
-
-my $VALID_ACCESSOR_OPTIONS = {
-    Attr            => \%VALID_OBJECT_ACCESSOR_OPTIONS,
-    ClassAttr       => \%VALID_CLASS_ACCESSOR_OPTIONS,
-    ClassObjectAttr => \%VALID_CLASS_OBJECT_ACCESSOR_OPTIONS,
-    Output          => \%VALID_OUTPUT_OPTIONS,
-    Translate       => \%VALID_TRANSLATE_OPTIONS
-};
-
-# Check accessor options
-sub check_accessor_option {
-    my ( $accessor_name, $class, $accessor_options, $accessor_type ) = @_;
-    
-    my $valid_accessor_options = $VALID_ACCESSOR_OPTIONS->{$accessor_type};
-    
-    foreach my $accessor_option_name (keys %$accessor_options){
-        croak("${class}::$accessor_name '$accessor_option_name' is invalid accessor option.")
-          unless $valid_accessor_options->{$accessor_option_name};
-    }
-}
-
-# Define MODIFY_CODE_ATTRIBUTRS subroutine
-my %VALID_ACCESSOR_TYPES = map {$_ => 1} qw/Attr ClassAttr ClassObjectAttr Output Translate/;
-sub define_MODIFY_CODE_ATTRIBUTES {
-    my $class = shift;
-    
-    # MODIFY_CODE_ATTRIBUTES
-    my $code = sub {
-        my ($class, $code_ref, $accessor_type) = @_;
-        
-        # Accessor type is not exist
-        croak("Accessor type '$accessor_type' is not exist. " .
-              "Accessor type must be 'Attr', 'ClassAttr', " . 
-              "'ClassObjectAttr'")
-          unless $VALID_ACCESSOR_TYPES{$accessor_type};
-        
-        # Add 
-        push(@Object::Simple::ACCESSOR_INFOS, [$class, $code_ref, $accessor_type]);
-        
-        return;
-    };
-    
-    no strict 'refs';
-    *{"${class}::MODIFY_CODE_ATTRIBUTES"} = $code;
-}
-
-package Object::Simple;
+sub class_attrs       { Util->class_attrs(@_) }
+sub exists_class_attr { Util->exists_class_attr(@_) }
+sub delete_class_attr { Util->delete_class_attr(@_) }
 
 =head1 NAME
  
 Object::Simple - Simple class builder
  
-=head1 Version
+=head1 VERSION
+
+Version 2.1001
+
+=cut
+
+our $VERSION = '2.1001';
  
-Version 2.0803
- 
-=head1 Features
+=head1 FEATURES
  
 =over 4
  
@@ -1094,7 +415,7 @@ writing new and accessors repeatedly.
 
 =cut
  
-=head1 Synopsis
+=head1 SYNOPSIS
  
     # Class definition( Book.pm )
     package Book;
@@ -1110,17 +431,13 @@ writing new and accessors repeatedly.
     use Book;
     my $book = Book->new(title => 'a', author => 'b', price => 1000);
     
-    # Default value (number or string)
-    sub author  : Attr { default => 'taro' }
+    # Default
+    sub author  : Attr { default => 'Good new' }
+    sub persons : Attr { default => sub {['Ken', 'Taro']} }
     
-    # Default value (reference)
-    sub persons : Attr { default => sub {['taro', 'ken']} }
-    
-    # Automatically build
-    sub author  : Attr { auto_build => sub {
-        my $self = shift;
-        $self->author($self->title . "b");
-    }}
+    # Build
+    sub title   : Attr { build => 'Good news' }
+    sub authors : Attr { build => sub{['Ken', 'Taro']} }
     
     # Read only accessor
     sub year   : Attr { read_only => 1 }
@@ -1151,16 +468,10 @@ writing new and accessors repeatedly.
     sub state : Attr {}
     
     # Define accessor for class attriute
-    sub options : ClassAttr {
-        type => 'array',
-        auto_build => sub { shift->options([]) }
-    }
+    sub options : ClassAttr { type => 'array',  build => sub {[]} }
     
     # Define accessor for both object attribute and class attribute
-    sub options : ClassObjectAttr {
-        type => 'array',
-        auto_build => sub { shift->options([]) }
-    }
+    sub options : HybridAttr { type => 'array', build => sub {[]} }
     
     # Inheritance
     package Magazine;
@@ -1320,33 +631,27 @@ If you want to build class, you must call 'build_class'
  
 You can define attribute default value.
  
-    sub title : Attr {default => 'Good news'}
+    sub title    : Attr {default => 'Good news'}
  
 If you define default values using reference or Object,
 you need wrapping it by sub{}.
  
     sub authors : Attr { default => sub{['Ken', 'Taro']} }
- 
-=head2 auto_build
- 
-When accessor is called first,a methods is called to build attribute.
- 
-    sub author : Attr { auto_build => 1 }
-    sub build_author{
+
+=head2 build
+
+Create attribute when accessed first. Usage is almost same as 'default'.
+
+    sub title   : Attr { build => 'Good news' }
+    sub authors : Attr { build => sub{['Ken', 'Taro']} }
+
+'build' subroutine receive $self. using other attribute, you can build this attribute.
+
+    sub title : Attr { build => sub {
         my $self = shift;
-        $self->atuhor( Person->new );
-    }
- 
-Builder method name is build_ATTRIBUTE_NAME by default;
- 
-You can specify build method .
- 
-    sub author : Attr { auto_build => 1 }
-    sub create_author{
-        my $self = shift;
-        $self->atuhor( Person->new );
-    }
- 
+        return Some::Module->new($self->authors);
+    }}
+
 =head2 read_only
  
 You can create read only accessor
@@ -1447,24 +752,22 @@ If you overwrite only default value, do the following
     
     Object::Simple->build_class;
 
-=head2 initialize
+=head2 clone
 
 This accessor options is only used 
-when accessor type is 'ClassAttr', or 'ClassObjectAttr'.
+when accessor type is 'ClassAttr', or 'HybridAttr'.
 
-Initialize Class attribute or Object attribute
+Clone Class attribute or Object attribute
 
-    sub method : ClassObjectAttr {
-        initialize => {clone => $clone_method, default => $default_value }
+    sub method : HybridAttr {
+        clone => $clone_method, build => $default_value }
     }
     
 Sample
 
-    sub constraints : ClassObjectAttr {
-        initialize => {clone => 'hash', default => sub { {} } }; 
-    }
+    sub constraints : HibridAttr { clone => 'hash', build => sub {{}} }
     
-If 'initialize' option is specified and when access this attribute,
+If 'clone' option is specified and when access this attribute,
 super class value is cloned when invocant is class
 and class attribute is cloned when invacant is object
 
@@ -1485,32 +788,23 @@ Samples
     clone => 'hash'
     clone => sub { shift->clone }
 
-'default' must be scalar or code ref
-
-    default => 'good life' # scalar 
-    default => sub {[]}  # array ref
-    default => sub {{}}  # hash
-
 =head1 Special accessors
 
 =head2 ClassAttr - Accessor for class variable
 
 You can also define accessor for class variable.
 
-    sub options : ClassAttr {
-        type => 'array',
-        auto_build => sub { shift->options([]) }
-    }
+    sub options : ClassAttr { type => 'array', build => sub {[]} }
 
 options set or get class variable, not some instance.
 
 you can use the same accessor options as normal accessor except 'default' option.
 
-If you define default value to class variable, you must use 'auto_build' option.
+If you define default value to class variable, you must use 'build' option.
 
 If this accessor is used subclass, it access subclass class variable, not the class it is defined. 
 
-=head2 ClassObjectAttr - Accessor for object or class variable 
+=head2 HybridAttr - Accessor for object or class variable 
 
 You can define object or class hibrid accessor.
 
@@ -1652,6 +946,7 @@ You can create custamizable module easy way.
 
 L<Validator::Custom>, L<DBIx::Custom>
 
+
 =head1 Discoraged options and methods
 
 The following options and methods are discuraged now.
@@ -1680,6 +975,84 @@ This is discuraged now. instead, you write this
     
     exists $class->class_attrs->{$attr};
 
+=head2 auto_build
+
+'auto_build' options is now discoraged.
+
+Instead of 'auto_build', use 'build'. 'build' is more simple than 'auto_build'.
+
+    sub author : Attr { auto_build => sub { shift->author(Some::Module->new) } }
+    
+    sub author : Attr { build => sub { Some::Module->new } }
+
+The following is original document.
+
+When accessor is called first,a methods is called to build attribute.
+ 
+    sub author : Attr { auto_build => 1 }
+    sub build_author{
+        my $self = shift;
+        $self->atuhor( Person->new );
+    }
+ 
+Builder method name is build_ATTRIBUTE_NAME by default;
+ 
+You can specify build method .
+ 
+    sub author : Attr { auto_build => 1 }
+    sub create_author{
+        my $self = shift;
+        $self->atuhor( Person->new );
+    }
+    
+=head2 initialize
+
+is now discoraged. instead of 'initialize', use 'clone'.
+
+The following is original document.
+
+This accessor options is only used 
+when accessor type is 'ClassAttr', or 'ClassObjectAttr'.
+
+Initialize Class attribute or Object attribute
+
+    sub method : ClassObjectAttr {
+        initialize => {clone => $clone_method, default => $default_value }
+    }
+    
+Sample
+
+    sub constraints : ClassObjectAttr {
+        initialize => {clone => 'hash', default => sub { {} } }; 
+    }
+    
+If 'initialize' option is specified and when access this attribute,
+super class value is cloned when invocant is class
+and class attribute is cloned when invacant is object
+
+'clone' option must be specified.The following is clone options
+
+The following is clone options
+
+    1. 'scalar'     # Normal copy
+    2. 'array'      # array ref shallow copy : sub{ [@{shift}] }
+    3. 'hash'       # hash ref shallow copy  : sub{ {%{shift}} }
+    4. code ref     # your clone method, for exsample : 
+                    #   sub { shift->clone }
+
+Samples
+
+    clone => 'scalar'
+    clone => 'array'
+    clone => 'hash'
+    clone => sub { shift->clone }
+
+'default' must be scalar or code ref
+
+    default => 'good life' # scalar 
+    default => sub {[]}  # array ref
+    default => sub {{}}  # hash
+
 =head2 delete_class_attr methods
 
 Delete class attribute
@@ -1689,6 +1062,10 @@ Delete class attribute
 This is discuraged now. instead, you write this
 
     delete $class->class_attrs->{$attr};
+
+=head2 ClassObjectAttr
+
+'ClassObjectAttr' is deprecated. This is renamed to 'HybridAttr'.
 
 =head1 Similar modules
 
