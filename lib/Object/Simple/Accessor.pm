@@ -8,7 +8,16 @@ use Object::Simple::Util;
 use constant Util => 'Object::Simple::Util';
 use base 'Exporter';
 
-our @EXPORT_OK = qw/attr class_attr hybrid_attr/;
+our @EXPORT_OK = qw/new attr class_attr hybrid_attr/;
+
+sub new {
+    my $class = shift;
+
+    # Instantiate
+    return bless
+      exists $_[0] ? exists $_[1] ? {@_} : {%{$_[0]}} : {},
+      ref $class || $class;
+}
 
 sub attr        { _create_accessor(shift, 'attr',        @_) }
 sub class_attr  { _create_accessor(shift, 'class_attr',  @_) }
@@ -72,13 +81,29 @@ sub _check_options {
     }
 }
 
+=head1 NAME
+
+Object::Simple::Accessor - provide accessor creating ability
+
+=head1 SYNOPSYS
+    
+    package YourModule;
+    use Object::Simple::Accessor 'attr';
+    
+    __PACKAGE__->attr(title   => 'Good day');
+    __PACKAGE__->attr(authors => sub {[]});
+
 =head1 Functions
+
+You can export these mehtod. If you want to know usage, see L<Object::Simple::Base>
 
 =head2 attr
 
 =head2 class_attr
 
 =head2 hybrid_attr
+
+=head2 new
 
 =head1 Author
  
