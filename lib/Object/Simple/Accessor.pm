@@ -34,9 +34,10 @@ sub _create_accessor {
     
     # Arrange options
     my $options = @options > 1 ? {@options} : {build => $options[0]};
-
-    # Check options
-    _check_options($type, $options);
+    
+    # Upgrade
+    my $default = delete $options->{default};
+    $options->{build} = $default if $default;
     
     foreach my $attr (@$attrs) {
         
@@ -56,29 +57,7 @@ sub _create_accessor {
         no strict 'refs';
         *{"${class}::$attr"} = $code;
     }
-}
-
-my %VALID_ACCESSOR_OPTIONS        = map { $_ => 1 } qw/build type deref/;
-my %VALID_CLASS_ACCESSOR_OPTIONS  = map { $_ => 1 } qw/build type deref clone/;
-my %VALID_HYBRID_ACCESSOR_OPTIONS = map { $_ => 1 } qw/build type deref clone/;
-
-sub _check_options {
-    my ($type, $options) = @_;
-    
-    foreach my $oname (keys %$options) {
-        if ($type eq 'attr') {
-            croak "'attr' option must be 'build', 'type', or 'deref'"
-              unless $VALID_ACCESSOR_OPTIONS{$oname};
-        }
-        elsif ($type eq 'class_attr') {
-            croak "'attr' option must be 'build', 'type', 'deref', or 'clone'"
-              unless $VALID_CLASS_ACCESSOR_OPTIONS{$oname};
-        }
-        else {
-            croak "'attr' option must be 'build', 'type', 'deref', or 'clone'"
-              unless $VALID_HYBRID_ACCESSOR_OPTIONS{$oname};
-        }
-    }
+    return $class;
 }
 
 =head1 NAME
