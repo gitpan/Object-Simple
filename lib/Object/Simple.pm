@@ -390,11 +390,11 @@ Object::Simple - a simple class builder
  
 =head1 VERSION
 
-Version 2.1202
+Version 2.1203
 
 =cut
 
-our $VERSION = '2.1202';
+our $VERSION = '2.1203';
  
 =head1 FEATURES
  

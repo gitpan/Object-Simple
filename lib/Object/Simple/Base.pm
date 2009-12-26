@@ -55,16 +55,15 @@ A subclass of Object::Simple can call "new", and create a instance.
     package main;
     my $book = Book->new;
     my $book = Book->new(title => 'Good day');
-    my $book = Book->new({name => 'Good'});
+    my $book = Book->new({title => 'Good'});
 
-"new" can be overrided to arrange arguments or initialize instance.
+"new" can be overrided to arrange arguments or initialize the instance.
 
 Arguments arrange
     
     sub new {
         my ($class, $title, $author) = @_;
         
-        # Arrange arguments
         my $self = $class->SUPER::new(title => $title, author => $author);
         
         return $self;
@@ -80,16 +79,16 @@ Instance initialization
         return $self;
     }
 
-If you use one of "weak", "convert", or "trigger" options,
+If you use one of "weak", "convert" or "trigger" options,
 It will be better to initialize attributes.
 
     __PACKAGE__->attr(parent => (weak => 1));
-    __PACAKGE__->attr(params => (convert => 'Parameters'));
+    __PACAKGE__->attr(url => (convert => 'URI'));
     
     sub new {
         my $self = shift->SUPER::new(@_);
         
-        foreach my $attr (qw/parent params/) {
+        foreach my $attr (qw/parent url/) {
             $self->$attr($self->{$attr}) if exists $self->{$attr};
         }
         
@@ -102,14 +101,14 @@ This is a little bitter work. "init_attrs" of Object::Simple::Util is useful.
     sub new {
         my $self = shift->SUPER::new(@_);
         
-        Object::Simple::Util->init_attrs($self, qw/parent params/);
+        Object::Simple::Util->init_attrs($self, qw/parent url/);
         
         return $self;
     }
 
 =head2 attr
 
-"attr" create accessor.
+Create accessor.
     
     __PACKAGE__->attr('name');
     __PACKAGE__->attr([qw/name1 name2 name3/]);
@@ -129,7 +128,7 @@ Various options can be specified.
 
 =head2 class_attr
 
-"class_attr" create accessor for class variable.
+Create accessor for class variable.
 
     __PACKAGE__->class_attr('name');
     __PACKAGE__->class_attr([qw/name1 name2 name3/]);
@@ -141,14 +140,14 @@ This accessor is called from package, not instance.
     Book->title('BBB');
 
 Class variables is saved to package variable "$CLASS_ATTRS". If you want to
-delete the value or check existence, "delete", or "exists" function is available.
+delete the value or check existence, "delete" or "exists" function is available.
 
     delete $Book::CLASS_ATTRS->{title};
     exists $Book::CLASS_ATTRS->{title};
 
-If this class is extended to subclass, the value is saved to subclass.
-For example, Book->title('...') is saved to $Book::CLASS_ATTRS->{title},
-and Magazine->title('...') is saved to $Magazine::CLASS_ATTRS->{title}
+If This class is inherited, the value is saved to package variable of subclass.
+For example, Book->title('Beautiful days') is saved to $Book::CLASS_ATTRS->{title},
+and Magazine->title('Good days') is saved to $Magazine::CLASS_ATTRS->{title}.
 
     package Book;
     use base 'Object::Simple::Base';
@@ -160,25 +159,25 @@ and Magazine->title('...') is saved to $Magazine::CLASS_ATTRS->{title}
     
     package main;
     
-    Book->title('Beautiful days');
-    Magazine->title('Good days');
+    Book->title('Beautiful days'); # Saved to $Book::CLASS_ATTRS->{title}
+    Magazine->title('Good days');  # Saved to $Magazine::CLASS_ATTRS->{title}
 
 =head2 hybrid_attr
 
-"hybrid_attr" create accessor for instance variable and class variable.
+Create accessor for a instance and class variable.
 
     __PACKAGE__->hybrid_attr('name');
     __PACKAGE__->hybrid_attr([qw/name1 name2 name3/]);
     __PACKAGE__->hybrid_attr(name => 'foo');
     __PACKAGE__->hybrid_attr(name => sub { ... });
 
-If this accessor is called from package, the value is saved to $CLASS_ATTRS.
-If this accessor is called from instance, the value is saved to the instance.
+If this accessor is called from a package, the value is saved to $CLASS_ATTRS.
+If this accessor is called from a instance, the value is saved to the instance.
 
-    Book->title('Beautiful days');
+    Book->title('Beautiful days'); # Saved to $CLASS_ATTRS->{title};
     
     my $book = Book->new;
-    $book->title('Good days');
+    $book->title('Good days'); # Saved to $book->{title};
     
 =head1 Accessor options
  
@@ -194,17 +193,11 @@ the value is wrapped with sub { }.
     __PACKAGE__->attr(authors => (default => sub{ ['Ken', 'Taro'] }));
     __PACKAGE__->attr(ua      => (default => sub { LWP::UserAgent->new }));
 
-Default value is also written in simple way.
+Default value can be written by more simple way.
 
     __PACKAGE__->attr(title   => 'Good news');
     __PACKAGE__->attr(authors => sub { ['Ken', 'Taro'] });
     __PACKAGE__->attr(ua      => sub { LWP::UserAgent->new });
-
-=head2 weak
-
-Weaken a reference.
- 
-    __PACKAGE__->attr(parent => (weak => 1));
 
 =head2 type
 
@@ -214,13 +207,13 @@ Specify a variable type.
     __PACKAGE__->attr(country_id => (type => 'hash'));
 
 If list is passed to the accessor which type is "array",
-the list is converted to a array ref automatically.
+the list is converted to a array ref.
 
      $book->authors('ken', 'taro'); # ('ken', 'taro') -> ['ken', 'taro']
      $book->authors('ken');         # ('ken')         -> ['ken']
 
 If list is passed to the accessor which type is "hash",
-the list is converted to a hash ref automatically.
+the list is converted to a hash ref.
 
      $book->country_id(Japan => 1); # (Japan => 1)    -> {Japan => 1}
 
@@ -233,6 +226,17 @@ Dereference a array ref or hash ref. "type" optios must be specified with "deref
 
     my @authors = $book->authors;
     my %country_id = $book->country_id;
+
+=head2 trigger
+
+Define a subroutine, which is called when the value is set.
+This function is received the instance as first argument, 
+the old value as second argument.
+
+    __PACKAGE__->attr(error => (trigger => sub{
+        my ($self, $old) = @_;
+        $self->state('error') if $self->error;
+    }));
 
 =head2 convert
 
@@ -248,22 +252,17 @@ Any subroutine is available to convert the value.
         $value = URI->new($value) unless ref $value;
         return $value;
     }));
-    
-=head2 trigger
 
-Define a subroutine, which is called when the value is set.
-This function is received the instance as first argument, 
-and old value as second argument.
+=head2 weak
 
-    __PACKAGE__->attr(error => (trigger => sub{
-        my ($self, $old) = @_;
-        $self->state('error') if $self->error;
-    }));
+Weaken a reference.
+ 
+    __PACKAGE__->attr(parent => (weak => 1));
 
 =head2 clone
 
-Package variable of super class is copied, If the accessor is for class.
-Package variable is copied, If the accessor for instance.
+Package variable of super class is copied to the class at first access, If the accessor is for class.
+Package variable is copied to the instance, If the accessor is for instance.
 
 "clone" is available by "class_attr", and "hybrid_attr".
 This options is generally used with "default" value.
@@ -276,8 +275,6 @@ Any subroutine for clone is also available.
 
     __PACKAGE__->hybrid_attr(url => (default => sub { URI->new }, 
                                      clone   => sub { shift->clone }));
-
-The explanation of "clone" is a little difficult. See "Prototype system"
 
 =head1 Prototype system
 
@@ -311,8 +308,12 @@ This value is used when instance is created. "title" value is "Beautiful day"
     package main;
     my $book = Class2->new;
     $book->title;
+    
+This prototype system is very useful to create castamizable class for user.
 
 This prototype system is used in L<Validator::Custom> and L<DBIx::Custom>.
+
+See L<Validator::Custom> and L<DBIx::Custom>.
 
 =head1 Export
 
