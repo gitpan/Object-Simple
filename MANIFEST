@@ -3,6 +3,7 @@ Changes
 lib/Object/Simple.pm
 lib/Object/Simple/Accessor.pm
 lib/Object/Simple/Base.pm
+lib/Object/Simple/InternalUtil.pm
 lib/Object/Simple/Util.pm
 Makefile.PL
 MANIFEST			This list of files
