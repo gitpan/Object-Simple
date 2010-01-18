@@ -2,7 +2,7 @@ package Object::Simple::Base;
 use strict;
 use warnings;
 
-use Object::Simple::Accessor qw/attr class_attr hybrid_attr/;
+use Object::Simple::Accessor qw/attr class_attr dual_attr/;
 
 use base 'Exporter';
 our @EXPORT_OK = ('new');
@@ -26,11 +26,11 @@ Object::Simple::Base - a base class to provide constructor and accessors
     use base 'Object::Simple::Base';
  
     __PACKAGE__->attr('title');
-    __PACKAGE__->attr('pages' => 159);
+    __PACKAGE__->attr(pages => 159);
     __PACKAGE__->attr([qw/authors categories/] => sub { [] });
     
     __PACKAGE__->class_attr('aaa');
-    __PACKAGE__->hybrid_attr('bbb');
+    __PACKAGE__->dual_attr('bbb');
  
     package main;
     use Book;
@@ -79,16 +79,16 @@ Instance initialization
         return $self;
     }
 
-If you use one of "weak", "convert" or "trigger" options,
+If you use one of "convert" or "trigger" options,
 It will be better to initialize attributes.
-
-    __PACKAGE__->attr(parent => (weak => 1));
-    __PACAKGE__->attr(url => (convert => 'URI'));
+    
+    __PACAKGE__->attr('url', convert => 'URI');
+    __PACKAGE__->attr('error', trigger => sub { .. });
     
     sub new {
         my $self = shift->SUPER::new(@_);
         
-        foreach my $attr (qw/parent url/) {
+        foreach my $attr (qw/url error/) {
             $self->$attr($self->{$attr}) if exists $self->{$attr};
         }
         
@@ -101,7 +101,7 @@ This is a little bitter work. "init_attrs" of Object::Simple::Util is useful.
     sub new {
         my $self = shift->SUPER::new(@_);
         
-        Object::Simple::Util->init_attrs($self, qw/parent url/);
+        Object::Simple::Util->init_attrs($self, qw/url error/);
         
         return $self;
     }
@@ -124,7 +124,7 @@ that must be wrapped with sub { }.
 
 Various options can be specified.
 
-    __PACKAGE__->attr(name => (default => sub {[]}, type => 'array', deref => 1));
+    __PACKAGE__->attr('name', default => sub {[]}, trigger => sub { .. });
 
 =head2 class_attr
 
@@ -162,14 +162,14 @@ and Magazine->title('Good days') is saved to $Magazine::CLASS_ATTRS->{title}.
     Book->title('Beautiful days'); # Saved to $Book::CLASS_ATTRS->{title}
     Magazine->title('Good days');  # Saved to $Magazine::CLASS_ATTRS->{title}
 
-=head2 hybrid_attr
+=head2 dual_attr
 
 Create accessor for a instance and class variable.
 
-    __PACKAGE__->hybrid_attr('name');
-    __PACKAGE__->hybrid_attr([qw/name1 name2 name3/]);
-    __PACKAGE__->hybrid_attr(name => 'foo');
-    __PACKAGE__->hybrid_attr(name => sub { ... });
+    __PACKAGE__->dual_attr('name');
+    __PACKAGE__->dual_attr([qw/name1 name2 name3/]);
+    __PACKAGE__->dual_attr(name => 'foo');
+    __PACKAGE__->dual_attr(name => sub { ... });
 
 If this accessor is called from a package, the value is saved to $CLASS_ATTRS.
 If this accessor is called from a instance, the value is saved to the instance.
@@ -185,13 +185,13 @@ If this accessor is called from a instance, the value is saved to the instance.
  
 Define a default value.
 
-    __PACKAGE__->attr(title => (default => 'Good news'));
+    __PACKAGE__->attr('title', default => 'Good news');
 
 If a default value is array ref, or hash ref, or object,
 the value is wrapped with sub { }.
 
-    __PACKAGE__->attr(authors => (default => sub{ ['Ken', 'Taro'] }));
-    __PACKAGE__->attr(ua      => (default => sub { LWP::UserAgent->new }));
+    __PACKAGE__->attr('authors', default => sub{ ['Ken', 'Taro'] });
+    __PACKAGE__->attr('ua',      default => sub { LWP::UserAgent->new });
 
 Default value can be written by more simple way.
 
@@ -199,33 +199,6 @@ Default value can be written by more simple way.
     __PACKAGE__->attr(authors => sub { ['Ken', 'Taro'] });
     __PACKAGE__->attr(ua      => sub { LWP::UserAgent->new });
 
-=head2 type
-
-Specify a variable type.
-
-    __PACKAGE__->attr(authors => (type => 'array'));
-    __PACKAGE__->attr(country_id => (type => 'hash'));
-
-If list is passed to the accessor which type is "array",
-the list is converted to a array ref.
-
-     $book->authors('ken', 'taro'); # ('ken', 'taro') -> ['ken', 'taro']
-     $book->authors('ken');         # ('ken')         -> ['ken']
-
-If list is passed to the accessor which type is "hash",
-the list is converted to a hash ref.
-
-     $book->country_id(Japan => 1); # (Japan => 1)    -> {Japan => 1}
-
-=head2 deref
-
-Dereference a array ref or hash ref. "type" optios must be specified with "deref".
-    
-    __PACKAGE__->attr(authors    => (type => 'array', deref => 1));
-    __PACKAGE__->attr(country_id => (type => 'hash',  deref => 1));
-
-    my @authors = $book->authors;
-    my %country_id = $book->country_id;
 
 =head2 trigger
 
@@ -233,48 +206,27 @@ Define a subroutine, which is called when the value is set.
 This function is received the instance as first argument, 
 the old value as second argument.
 
-    __PACKAGE__->attr(error => (trigger => sub{
+    __PACKAGE__->attr('error', trigger => sub{
         my ($self, $old) = @_;
         $self->state('error') if $self->error;
-    }));
-
-=head2 convert
-
-Convert no blessed scalar value to a instance.
-
-    __PACKAGE__->attr(url => (convert => 'URI'));
-    $book->url('http://somehost'); # convert to a instance of URI.
-
-Any subroutine is available to convert the value.
-
-    __PACKAGE__->attr(url => (convert => sub{
-        my $value = shift;
-        $value = URI->new($value) unless ref $value;
-        return $value;
-    }));
-
-=head2 weak
-
-Weaken a reference.
- 
-    __PACKAGE__->attr(parent => (weak => 1));
+    });
 
 =head2 clone
 
 Package variable of super class is copied to the class at first access, If the accessor is for class.
 Package variable is copied to the instance, If the accessor is for instance.
 
-"clone" is available by "class_attr", and "hybrid_attr".
+"clone" is available by "class_attr", and "dual_attr".
 This options is generally used with "default" value.
 
-    __PACKAGE__->hybrid_attr(contraints => (clone => 'hash', default => sub { {} }));
+    __PACKAGE__->dual_attr('contraints', clone => 'hash', default => sub { {} });
     
 "scalar", "array", "hash" is specified as "clone" options.
 
 Any subroutine for clone is also available.
 
-    __PACKAGE__->hybrid_attr(url => (default => sub { URI->new }, 
-                                     clone   => sub { shift->clone }));
+    __PACKAGE__->dual_attr('url', default => sub { URI->new }, 
+                                  clone   => sub { shift->clone });
 
 =head1 Prototype system
 
@@ -289,12 +241,12 @@ L<Object::Simple::Base> provide a prototype system like JavaScript.
     | Class2 | -> |instance2 |
     +--------+    +----------+
 
-"Class1" has "title" accessor using "hybrid_attr" with "clone" options.
+"Class1" has "title" accessor using "dual_attr" with "clone" options.
 
     package Class1;
     use base 'Object::Simple::Base';
     
-    __PACKAGE__->hybrid_attr(title => (default => 'Good day', clone => 'scalar'));
+    __PACKAGE__->dual_attr('title', default => 'Good day', clone => 'scalar');
 
 "title" can be changed in "Class2".
 

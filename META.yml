@@ -1,6 +1,6 @@
 ---
 name: Object-Simple
-version: 2.1204
+version: 2.1301
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
 abstract: a simple class builder
@@ -16,7 +16,7 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 2.1204
+    version: 2.1301
   Object::Simple::Accessor:
     file: lib/Object/Simple/Accessor.pm
   Object::Simple::Base:
