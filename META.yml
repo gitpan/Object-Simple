@@ -1,9 +1,9 @@
 ---
 name: Object-Simple
-version: 2.1301
+version: 3.0101
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
-abstract: a simple class builder
+abstract: Simple OO framework
 license: perl
 resources:
   homepage: http://github.com/yuki-kimoto/object-simple
@@ -16,13 +16,15 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 2.1301
+    version: 3.0101
   Object::Simple::Accessor:
     file: lib/Object/Simple/Accessor.pm
   Object::Simple::Base:
     file: lib/Object/Simple/Base.pm
-  Object::Simple::InternalUtil:
-    file: lib/Object/Simple/InternalUtil.pm
+  Object::Simple::Old:
+    file: lib/Object/Simple/Old.pm
+  Object::Simple::OldUtil:
+    file: lib/Object/Simple/OldUtil.pm
   Object::Simple::Util:
     file: lib/Object/Simple/Util.pm
 generated_by: Module::Build version 0.31012
