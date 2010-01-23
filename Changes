@@ -1,3 +1,5 @@
+3.0202
+    fix test bug
 3.0201
    remove 'Objet::Simple::Old' and 'Object::Simple::OldUtil'
    rename 'Object::Simple::Base' to 'Object::Simple',

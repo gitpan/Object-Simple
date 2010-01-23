@@ -19,11 +19,11 @@ Object::Simple - a base class to provide constructor and accessors
 
 =head1 VERSION
 
-Version 3.0201
+Version 3.0202
 
 =cut
 
-our $VERSION = '3.0201';
+our $VERSION = '3.0202';
 
 =head1 SYNOPSIS
     
