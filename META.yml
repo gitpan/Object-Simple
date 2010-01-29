@@ -1,6 +1,6 @@
 ---
 name: Object-Simple
-version: 3.0202
+version: 3.0301
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
 abstract: a base class to provide constructor and accessors
@@ -14,11 +14,9 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 3.0202
-  Object::Simple::Accessor:
-    file: lib/Object/Simple/Accessor.pm
+    version: 3.0301
   Object::Simple::Util:
-    file: lib/Object/Simple/Util.pm
+    file: lib/Object/Simple.pm
 generated_by: Module::Build version 0.31012
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
