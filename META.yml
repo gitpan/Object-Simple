@@ -1,9 +1,9 @@
 ---
 name: Object-Simple
-version: 3.0601
+version: 3.0602
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
-abstract: Provide new() and accessor creating abilities
+abstract: Provide new() and accessor creating methods
 license: perl
 resources:
   homepage: http://github.com/yuki-kimoto/object-simple
@@ -14,7 +14,7 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 3.0601
+    version: 3.0602
   Object::Simple::Accessor:
     file: lib/Object/Simple.pm
 generated_by: Module::Build version 0.31012
