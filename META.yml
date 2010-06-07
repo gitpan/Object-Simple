@@ -1,6 +1,6 @@
 ---
 name: Object-Simple
-version: 3.0607
+version: 3.0608
 author:
   - 'Yuki <kimoto.yuki@gmail.com>'
 abstract: 'generate accessor with default, and provide constructor'
@@ -14,7 +14,7 @@ build_requires:
 provides:
   Object::Simple:
     file: lib/Object/Simple.pm
-    version: 3.0607
+    version: 3.0608
   Object::Simple::Accessor:
     file: lib/Object/Simple.pm
 generated_by: Module::Build version 0.31012
