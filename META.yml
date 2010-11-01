@@ -1,24 +1,20 @@
----
-name: Object-Simple
-version: 3.0611
+--- #YAML:1.0
+name:               Object-Simple
+version:            3.0612
+abstract:           Generate accessor having default value, and provide constructor
 author:
-  - 'Yuki <kimoto.yuki@gmail.com>'
-abstract: 'Generate accessor having default value, and provide constructor'
-license: perl
-resources:
-  homepage: http://github.com/yuki-kimoto/object-simple
-  license: ~
-  repository: http://github.com/yuki-kimoto/object-simple
-build_requires:
-  Test::More: 0
-provides:
-  Object::Simple:
-    file: lib/Object/Simple.pm
-    version: 3.0611
-  Object::Simple::Accessor:
-    file: lib/Object/Simple.pm
-generated_by: Module::Build version 0.31012
+    - Yuki Kimoto <kimoto.yuki@gmail.com>
+license:            perl
+distribution_type:  module
+configure_requires:
+    ExtUtils::MakeMaker:  0
+requires:
+    Test::More:  0
+no_index:
+    directory:
+        - t
+        - inc
+generated_by:       ExtUtils::MakeMaker version 6.48
 meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.2.html
-  version: 1.2
-keywords: []
+    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
+    version:  1.4
