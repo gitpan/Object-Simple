@@ -1,5 +1,6 @@
 Changes
 lib/Object/Simple.pm
+lib/Object/Simple/Accessor.pm
 lib/Object/Simple/Guides.pod
 lib/Object/Simple/Guides/Ja.pod
 Makefile.PL
