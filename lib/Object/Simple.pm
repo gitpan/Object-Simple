@@ -1,6 +1,6 @@
 package Object::Simple;
 
-our $VERSION = '3.0616';
+our $VERSION = '3.0617';
 
 use strict;
 use warnings;
@@ -65,25 +65,70 @@ sub attr {
                         "or code ref (${class}::$attr)")
               unless !ref $default || ref $default eq 'CODE';
 
-# Code
-my $code = sub {
+        # Code
+        my $code;
+        if (defined $default && ref $default) {
 
-    my $self = shift;
 
-    $self->{$attr} = ref $default ? $default->($self) : $default
-      if @_ == 0 && defined $default && ! exists $self->{$attr};
 
-    if(@_ > 0) {
+$code = sub {
+
+    if(@_ > 1) {
+        Carp::croak qq{One argument must be passed to "${class}::$attr()"}
+          if @_ > 2;
         
-        Carp::croak qq{One argument must be passed to "${class}::$attr()"}                if @_ > 1;
+        $_[0]->{$attr} = $_[1];
         
-        $self->{$attr} = $_[0];
-        
-        return $self;
+        return $_[0];
     }
 
-    return $self->{$attr};
-};
+    return $_[0]->{$attr} = $default->($_[0]) if ! exists $_[0]->{$attr};
+    return $_[0]->{$attr};
+}
+
+        }
+        elsif (defined $default && ! ref $default) {
+
+
+
+$code = sub {
+    if(@_ > 1) {
+        Carp::croak qq{One argument must be passed to "${class}::$attr()"}
+          if @_ > 2;
+        
+        $_[0]->{$attr} = $_[1];
+        
+        return $_[0];
+    }
+    return $_[0]->{$attr} = $default if ! exists $_[0]->{$attr};
+    return $_[0]->{$attr};
+}
+
+
+
+    }
+    else {
+
+
+
+$code = sub {
+
+    if(@_ > 1) {
+        
+        Carp::croak qq{One argument must be passed to "${class}::$attr()"}
+          if @_ > 2;
+        
+        $_[0]->{$attr} = $_[1];
+        
+        return $_[0];
+    }
+
+    return $_[0]->{$attr};
+}
+
+
+
+    }
             
             no strict 'refs';
             *{"${class}::$attr"} = $code;
@@ -124,8 +169,8 @@ Class definition.
     # More easily
     __PACKAGE__->attr(
         [qw/foo bar baz/],
-        pot => 1,
-        mer => sub { 5 }
+        some => 1,
+        other => sub { 5 }
     );
 
 Use the class

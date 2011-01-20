@@ -1,8 +1,8 @@
 =head1 NAME
 
-Object::Simple::Guides -  Object::Simple Guides
+Object::Simple::Guide -  Object::Simple Guide
 
-=head1 GUIDES
+=head1 GUIDE
 
 =head2 1. Generate accessor
 
@@ -53,6 +53,24 @@ You can generate accessors at once.
 
     __PACKAGE__->attr([qw/foo bar baz/]);
     __PACKAGE__->attr([qw/foo bar baz/] => 0);
+
+You can create accessor more easily.
+
+    __PACKAGE__->attr(
+        some => 1,
+        other => sub { 5 }
+    );
+
+If arguments count is odd number, first argument is
+for accessor not having default value.
+
+    __PACKAGE__->attr(
+        [qw/foo bar baz/],
+        some => 1,
+        other => sub { 5 }
+    );
+
+This is most easy way of accessor definition.
 
 B<Example:>
 

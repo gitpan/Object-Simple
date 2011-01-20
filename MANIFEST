@@ -1,8 +1,8 @@
 Changes
 lib/Object/Simple.pm
 lib/Object/Simple/Accessor.pm
-lib/Object/Simple/Guides.pod
-lib/Object/Simple/Guides/Ja.pod
+lib/Object/Simple/Guide.pod
+lib/Object/Simple/Guide/Ja.pod
 Makefile.PL
 MANIFEST			This list of files
 README
