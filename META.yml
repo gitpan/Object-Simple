@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Object-Simple
-version:            3.0618
+version:            3.0619
 abstract:           Generate accessor having default value, and provide constructor
 author:
     - Yuki Kimoto <kimoto.yuki@gmail.com>

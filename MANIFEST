@@ -6,12 +6,8 @@ lib/Object/Simple/Guide/Ja.pod
 Makefile.PL
 MANIFEST			This list of files
 README
-t/00-load.t
-t/boilerplate.t
-t/cover.css
-t/coverage.html
 t/object-simple.t
 t/object-simple/T1.pm
-t/pod-coverage.t
-t/pod.t
+xt/boilerplate.t
+xt/pod.t
 META.yml                                 Module meta-data (added by MakeMaker)
