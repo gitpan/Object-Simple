@@ -1,12 +1,12 @@
 package Object::Simple;
 
-our $VERSION = '3.0621';
+our $VERSION = '3.0622';
 
 use strict;
 use warnings;
 no warnings 'redefine';
 
-use Carp ();
+use Carp ;
 
 sub import {
     my ($class, @methods) = @_;
@@ -23,7 +23,14 @@ sub import {
         *{"${caller}::has"} = sub { attr($caller, @_) };
         
         # Inheritance
-        push @{"${caller}::ISA"}, $class;
+        if (my $module = $methods[1]) {
+            $module =~ s/::|'/\//g;
+            require "$module.pm" unless $module->can('new');
+            push @{"${caller}::ISA"}, $module;
+        }
+        else {
+            push @{"${caller}::ISA"}, $class;
+        }
 
         # strict!
         strict->import;
@@ -59,7 +66,7 @@ sub new {
       if ref $_[0] eq 'HASH';
     
     Carp::croak(qq{Hash reference or even number arguments } . 
-                qq{must be passed to "${class}::new()"})
+                qq{must be passed to "${class}::new" method})
       if @_ % 2;
     
     return bless {@_}, ref $class || $class;
@@ -84,7 +91,7 @@ sub attr {
         
         foreach my $attr (@$attrs) {
 
-            Carp::croak("Default value of attr() must be string or number " . 
+            Carp::croak("Default value of attr must be string or number " . 
                         "or code reference (${class}::$attr)")
               unless !ref $default || ref $default eq 'CODE';
 
@@ -97,7 +104,7 @@ sub attr {
 $code = sub {
 
     if(@_ > 1) {
-        Carp::croak qq{One argument must be passed to "${class}::$attr()"}
+        Carp::croak qq{One argument must be passed to "${class}::$attr" attribute}
           if @_ > 2;
         
         $_[0]->{$attr} = $_[1];
@@ -116,7 +123,7 @@ $code = sub {
 
 $code = sub {
     if(@_ > 1) {
-        Carp::croak qq{One argument must be passed to "${class}::$attr()"}
+        Carp::croak qq{One argument must be passed to "${class}::$attr" attribute}
           if @_ > 2;
         
         $_[0]->{$attr} = $_[1];
@@ -138,7 +145,7 @@ $code = sub {
 
     if(@_ > 1) {
         
-        Carp::croak qq{One argument must be passed to "${class}::$attr()"}
+        Carp::croak qq{One argument must be passed to "${class}::$attr" attribute}
           if @_ > 2;
         
         $_[0]->{$attr} = $_[1];
@@ -166,6 +173,7 @@ sub class_attr {
     Object::Simple::Accessor::create_accessors('class_attr', @_)
 }
 
+# DEPRECATED!
 sub dual_attr {
     require Object::Simple::Accessor;
     Object::Simple::Accessor::create_accessors('dual_attr',  @_)
@@ -173,54 +181,27 @@ sub dual_attr {
 
 =head1 NAME
 
-Object::Simple - Generate accessor having default value, and provide constructor
+Object::Simple - Create attribute method, and provide constructor
 
 =head1 SYNOPSIS
 
     package SomeClass;
-    
-    use base 'Object::Simple';
-    
-    # Generate a accessor
-    __PACKAGE__->attr('foo');
-    
-    # Generate a accessor having default attribute value
-    __PACKAGE__->attr(foo => 1);
-    __PACKAGE__->attr(foo => sub { [] });
-    __PACKAGE__->attr(foo => sub { {} });
-    __PACKAGE__->attr(foo => sub { OtherClass->new });
-    
-    # Generate accessors at once
-    __PACKAGE__->attr([qw/foo bar baz/]);
-    __PACKAGE__->attr([qw/foo bar baz/] => 0);
-    
-    # Generate accessors more easy way
-    __PACKAGE__->attr(
-        [qw/foo bar baz/],
-        some => 1,
-        other => sub { 5 }
-    );
-
-More Simple
-
-    package SomeClass;
-    
     use Object::Simple -base;
     
-    # Generate a accessor
+    # Create a attribute method
     has 'foo';
     
-    # Generate a accessor having default attribute value
+    # Create a attribute method having default value
     has foo => 1;
     has foo => sub { [] };
     has foo => sub { {} };
     has foo => sub { OtherClass->new };
     
-    # Generate accessors at once
+    # Create attribute methods at once
     has [qw/foo bar baz/];
     has [qw/foo bar baz/] => 0;
     
-    # Generate accessors more easy way
+    # Create all attribute methods at once
     has [qw/foo bar baz/],
         some => 1,
         other => sub { 5 };
@@ -239,74 +220,92 @@ Use the class.
 Inheritance
 
     package Foo;
-    
     use Object::Simple -base;
     
     package Bar;
-    
     use Foo -base;
-    
-    has x => 1;
+    # or use Object::Simple -base => 'Foo';
 
 =head1 DESCRIPTION
 
-L<Object::Simple> is a generator of accessor,
+L<Object::Simple> is a generator of attribute method,
 such as L<Class::Accessor>, L<Mojo::Base>, or L<Moose>.
 L<Class::Accessor> is simple, but lack offten used features.
-C<new()> method can't receive hash arguments.
+C<new> method can't receive hash arguments.
 Default value can't be specified.
-If multipule values is set through the accssor,
+If multipule values is set through the attribute method,
 its value is converted to array reference without warnings.
 
-L<Moose> is too complex for many people to use,
-and depends on many modules. L<Moose> is almost another language,
-and don't fit familiar perl syntax.
-L<Moose> increase the complexity of projects,
-rather than increase production efficiency.
-In addition, its complie speed is slow
-and used memroy is large.
+Some people find L<Moose> too complex, and dislike that 
+it depends on outside modules. Some say that L<Moose> is 
+almost like another language and does not fit the familiar 
+perl syntax. In some cases, in particular smaller projects, 
+some people feel that L<Moose> will increase complexity
+and therefore decrease programmer efficiency.
+In addition, L<Moose> can be slow at compile-time and 
+its memory usage can get large.
 
-L<Object::Simple> is the middle area between L<Class::Accessor>
+L<Object::Simple> is the middle way between L<Class::Accessor>
 and complex class builder. Only offten used features is
-implemented.
-C<new()> can receive hash or hash reference as arguments.
-You can specify default value for the accessor.
+implemented. L<Object::Simple> is similar with L<Mojo::Base>.
+C<new> can receive hash or hash reference as arguments.
+You can specify default value for the attribute.
 Compile speed is fast and used memory is small.
 Debugging is easy.
-L<Object::Simple> is compatible of L<Mojo::Base>
-
-See L<Object::Simple::Guide> to know L<Object::Simple> details.
 
 =head1 GUIDE
 
-See L<Object::Simple::Guide>
+See L<Object::Simple::Guide> to know L<Object::Simple> details.
 
-=head1 METHODS
+=head1 FUNCTIONS
 
-=head2 C<new>
+If you specify -base flag, you can inherit Object::Simple
+and import C<has> function.
+C<has> function create attribute method.
 
-    my $obj = Object::Simple->new(foo => 1, bar => 2);
-    my $obj = Object::Simple->new({foo => 1, bar => 2});
-
-Create a new object. C<new()> receive
-hash or hash reference as arguments.
-
-=head2 C<attr>
-
-Generate accessor.
+    package Foo;
+    use Object::Simple -base;
     
-    __PACKAGE__->attr('foo');
-    __PACKAGE__->attr([qw/foo bar baz/]);
-    __PACKAGE__->attr(foo => 1);
-    __PACKAGE__->attr(foo => sub { {} });
+    has x => 1;
+    has y => 2;
 
-Generate accessor. C<attr()> receive
-accessor name and default attribute value.
+strict and warnings is automatically enabled and 
+Perl 5.10 features is imported.
+
+You can use C<-base> flag in sub class for inheritance.
+
+    package Bar;
+    use Foo -base;
+    # or use Object::Simple -base => 'Foo';
+    
+    has z => 3;
+
+This is equal to
+
+    package Bar;
+    
+    use base 'Foo';
+    use strict;
+    use warnings;
+    use feature ':5.10';
+    sub has { __PACKAGE__->attr(@_) }
+    
+=head2 C<has>
+
+Create attribute method.
+    
+    has 'foo';
+    has [qw/foo bar baz/];
+    has foo => 1;
+    has foo => sub { {} };
+
+Create attribute method. C<has> receive
+attribute name and default value.
 Default value is optional.
-If you want to create multipule accessors at once,
-specify accessor names as array reference at first argument.
+If you want to create multipule attribute methods at once,
+specify attribute names as array reference at first argument.
 
-If you want to specify refrence or object as default value,
+If you want to specify reference or object as default value,
 it must be code reference
 not to share the value with other objects.
 
@@ -318,12 +317,33 @@ Get and set a attribute value.
 If a default value is specified and the value is not exists,
 you can get default value.
 
-If a value is set, the accessor return self object.
+If a value is set, the attribute return self object.
 So you can set a value repeatedly.
 
    $obj->foo(1)->bar(2);
 
-You can create accessors more easy way.
+You can create all attribute methods at once.
+
+    has [qw/foo bar baz/],
+        pot => 1,
+        mer => sub { 5 };
+
+=head1 METHODS
+
+=head2 C<new>
+
+    my $obj = Object::Simple->new(foo => 1, bar => 2);
+    my $obj = Object::Simple->new({foo => 1, bar => 2});
+
+Create a new object. C<new> receive
+hash or hash reference as arguments.
+
+=head2 C<attr>
+
+    __PACKAGE__->attr('foo');
+    __PACKAGE__->attr([qw/foo bar baz/]);
+    __PACKAGE__->attr(foo => 1);
+    __PACKAGE__->attr(foo => sub { {} });
 
     __PACKAGE__->attr(
         [qw/foo bar baz/],
@@ -331,8 +351,8 @@ You can create accessors more easy way.
         mer => sub { 5 }
     );
 
-First argument are accessors without default.
-Rest arguments are accessors with default.
+Create attribute.
+C<attr> method usage is equal to C<has> method.
 
 =head1 BUGS
 

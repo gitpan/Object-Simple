@@ -10,6 +10,7 @@ t/object-simple.t
 t/object-simple/T1.pm
 t/object-simple/T2.pm
 t/object-simple/T3.pm
+t/object-simple/T3_2.pm
 xt/boilerplate.t
 xt/pod.t
 META.yml                                 Module meta-data (added by MakeMaker)

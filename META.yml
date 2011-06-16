@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:               Object-Simple
-version:            3.0621
-abstract:           Generate accessor having default value, and provide constructor
+version:            3.0622
+abstract:           Create attribute method, and provide constructor
 author:
     - Yuki Kimoto <kimoto.yuki@gmail.com>
 license:            perl

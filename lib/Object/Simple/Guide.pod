@@ -4,27 +4,25 @@ Object::Simple::Guide -  Object::Simple Guide
 
 =head1 GUIDE
 
-=head2 1. Generate accessor
+=head2 1. Create attribute method
 
-At first, you create a class extending L<Object::Simple>
-to use methods of L<Object::Simple>.
+At first, you create a class inheriting L<Object::Simple> by C<-base> flag.
 
     package SomeClass;
-    
-    use base 'Object::Simple';
+    use Object::Simple -base;
 
-L<Object::Simple> have C<new()> method. This is a constructor.
+L<Object::Simple> have C<new> method. This is a constructor.
 It can receive hash and hash reference as arguments.
     
     my $obj = SomeClass->new;
     my $obj = SomeClass->new(foo => 1, bar => 2);
     my $obj = SomeClass->new({foo => 1, bar => 2});
 
-You can generate accessor by C<attr()> method.
+You can create attribute method by C<has> function.
 
-    __PACKAGE__->attr('foo');
+    has 'foo';
 
-You can set and get the value by accessor.
+You can set and get the value by attribute method.
 
     # Set the value
     $obj->foo(1);
@@ -32,11 +30,11 @@ You can set and get the value by accessor.
     # Get the value
     my $foo = $obj->foo;
 
-You can specify a default value for the accessor.
+You can specify a default value for the attribute method.
 
     __PACKAGE__->attr(foo => 1);
 
-If the value of C<foo> is not exists and C<foo()> is called,
+If the value of C<foo> is not exists and C<foo> is called,
 You can get the default value.
 
     my $default_value = $obj->foo;
@@ -45,49 +43,36 @@ If you want to specify a reference or object as default value,
 it must be sub reference, whose return value is the default value.
 This is requirment not to share the default value with other objects.
 
-    __PACKAGE__->attr(foo => sub { [] });
-    __PACKAGE__->attr(foo => sub { {} });
-    __PACKAGE__->attr(foo => sub { SomeClass->new });
+    has foo => sub { [] };
+    has foo => sub { {} };
+    has foo => sub { SomeClass->new };
 
-You can generate accessors at once.
+You can create attribute methods at once.
 
-    __PACKAGE__->attr([qw/foo bar baz/]);
-    __PACKAGE__->attr([qw/foo bar baz/] => 0);
+    has [qw/foo bar baz/];
+    has [qw/foo bar baz/] => 0;
 
-You can create accessor more easily.
+You can create all attribute methods at once.
 
-    __PACKAGE__->attr(
+    has [qw/foo bar baz/],
         some => 1,
-        other => sub { 5 }
-    );
+        other => sub { 5 };
 
 If arguments count is odd number, first argument is
-for accessor not having default value.
+for attribute method not having default value.
 
-    __PACKAGE__->attr(
-        [qw/foo bar baz/],
-        some => 1,
-        other => sub { 5 }
-    );
-
-This is most easy way of accessor definition.
-
-B<Example:>
+=head2 Create Class
 
 I show a example to understand L<Object::Simple> well.
 
 Point class, which have two attribute, C<x> and C<y>,
-and C<clear()> method to set C<x> and C<y> to 0.
+and C<clear> method to set C<x> and C<y> to 0.
 
     package Point;
-    
-    use strict;
-    use warnings;
-    
-    use base 'Object::Simple';
+    use Object::Simple -base;
 
-    __PACKAGE__->attr(x => 0);
-    __PACKAGE__->attr(y => 0);
+    has x => 0;
+    has y => 0;
     
     sub clear {
         my $self = shift;
@@ -96,26 +81,38 @@ and C<clear()> method to set C<x> and C<y> to 0.
         $self->y(0);
     }
 
+You can use Point class in the folowing way.
+
+    use Point;
+    my $point = Point->new(x => 3, y => 5);
+    print $point->x;
+    $point->y(9);
+    $point->clear;
+
 Point3D class, which inherit L<Point> class.
 This class has C<z> attribute in addition to C<x> and C<y>.
-C<clear()> method is overridden to clear C<x>, C<y> and C<z>.
+C<clear> method is overridden to clear C<x>, C<y> and C<z>.
     
     package Point3D;
+    use Point -base;
     
-    use strict;
-    use warnings;
-    
-    use base 'Point';
-    
-    __PACKAGE__->attr(z => 0);
+    has z => 0;
     
     sub clear {
         my $self = shift;
         
-        $self->SUPER::clear();
+        $self->SUPER::clear;
         
         $self->z(0);
     }
+
+You can use Point3D class in the folowing way.
+
+    use Point3D;
+    my $point = Point->new(x => 3, y => 5, z => 8);
+    print $point->z;
+    $point->z(9);
+    $point->clear;
 
 =head2 2. Concepts of Object-Oriented programing
 
@@ -130,16 +127,16 @@ If Class Q inherit Class P, Class Q can call all method of class P.
 
     +---+
     | P | Base class
-    +---+   having method1() and method2()
+    +---+   having method1 and method2
       |
     +---+
     | Q | Sub class
-    +---+   having method3()
+    +---+   having method3
 
 Class Q inherits Class P,
 so Q can call all methods of P in addition to methods of Q.
 In other words, Q can call
-C<method1()>, C<method2()>, and C<method3()>
+C<method1>, C<method2>, and C<method3>
 
 To inherit a class, use L<base> module.
 
@@ -156,17 +153,17 @@ To inherit a class, use L<base> module.
 
 Perl has useful functions and methods to help Object-Oriented programing.
 
-To know the object is belong to what class, use C<ref()> function.
+To know the object is belong to what class, use C<ref> function.
 
     my $class = ref $obj;
 
-To know whether the object inherits the specified class, use C<isa()> method.
+To know whether the object inherits the specified class, use C<isa> method.
 
     $obj->isa('SomeClass');
 
 To know whether the object(or class)
 can call the specified method,
-use C<can()> method 
+use C<can> method 
 
     SomeClass->can('method1');
     $obj->can('method1');
@@ -180,7 +177,7 @@ You must use public methods in documentation.
 If you keep this rule, All the things become simple.
 
 To keep this rule,
-Use accessor to get and set to the value.
+Use attribute method to get and set to the value.
 
     my $value = $obj->foo;
     $obj->foo(1);
@@ -214,8 +211,8 @@ Overriding means that in sub class you can change the process of the base class'
     
     sub method1 { return 2 }
 
-C<method1()> of class P return 1. C<method1()> of class Q return 2.
-That is to say, C<method1()> is overridden in class Q.
+C<method1> of class P return 1. C<method1> of class Q return 2.
+That is to say, C<method1> is overridden in class Q.
 
     my $obj_a = P->new;
     $obj_p->method1; # Return value is 1
@@ -231,7 +228,7 @@ use SUPER pseudo-class.
     sub method1 {
         my $self = shift;
         
-        my $value = $self->SUPER::method1(); # return value is 1
+        my $value = $self->SUPER::method1; # return value is 1
         
         return 2 + $value;
     }
@@ -242,9 +239,9 @@ and source code is readable for other language users.
 
 =head2 3. Offten used techniques
 
-=head3 Override new() method
+=head3 Override new method
 
-C<new()> method is overridden if needed.
+C<new> method is overridden if needed.
 
 B<Example:>
 
@@ -260,7 +257,7 @@ Initialize the object
 
 B<Example:>
 
-Change arguments of C<new()>.
+Change arguments of C<new>.
     
     sub new {
         my $self = shift;
@@ -270,7 +267,7 @@ Change arguments of C<new()>.
         return $self;
     }
 
-You can pass array to C<new()> method by overridden C<new()> method.
+You can pass array to C<new> method by overridden C<new> method.
 
     my $point = Point->new(4, 5);
 
@@ -279,12 +276,12 @@ You can pass array to C<new()> method by overridden C<new()> method.
 =head3 Strict arguments check
 
 L<Object::Simple> pay attention to the usability.
-If wrong number arguments is passed to C<new()> method,
+If wrong number arguments is passed to C<new> method,
 exception is thrown.
     
     my $obj = SomeClass->new(1); # Exception!
 
-as is the accessor.
+as is the attribute method.
 
     $obj->foo(a => 1); # Execption!
 
@@ -299,20 +296,20 @@ This is useful in case you don't want to use multiple inheritance.
     
     __PACKAGE__->attr('foo');
 
-Note that you can't override C<new()> method
-because C<new()> method is imported in the class,
+Note that you can't override C<new> method
+because C<new> method is imported in the class,
 not inherited from base class.
 
 =head3 Method chain
 
 Method chain is available because
-accessor return self-object when it is called to set the value,
+attribute method return self-object when it is called to set the value,
 
     $obj->foo(1)->bar(4)->baz(6);
 
-=head3 Call C<attr()> from object.
+=head3 Call C<attr> from object.
 
-You can call C<attr()> from object.
+You can call C<attr> from object.
 
     $obj->attr(foo => 1);
 
@@ -327,5 +324,4 @@ I keep L<Object::Simple> backword compatible as possible.
 
 Methods written in documentation will not changed and not removed 
 
-You must not use DEPRECATED methods such as C<class_attr> or C<dual_attr>,
-In distant future, these methods is removed after long public comment period.
+=cut

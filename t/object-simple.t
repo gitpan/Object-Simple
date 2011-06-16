@@ -208,12 +208,12 @@ is(T1->m29, 5, "$test: inherit : sub ref default");
 test 'Accessor too many argument';
 $o = T1->new;
 eval{$o->m1(1, undef)};
-like($@, qr/\QOne argument must be passed to "T1::m1()"/, $test);
+like($@, qr/\QOne argument must be passed to "T1::m1" attribute/, $test);
 
 
 test 'new() Odd number argument';
 eval{$o = T1->new('a')};
-like($@, qr/\QHash reference or even number arguments must be passed to "T1::new()"/, $test);
+like($@, qr/\QHash reference or even number arguments must be passed to "T1::new" method/, $test);
 
 test 'Normal accessor';
 $o = T1->new;
@@ -221,7 +221,7 @@ $o->m1(1);
 is($o->m1, 1, "$test : set and get");
 is($o->m1(1), $o, "$test : set return");
 eval {$o->m1(1, 2)};
-like($@, qr/\QOne argument must be passed to "T1::m1()"/, "$test : One argument must be passed");
+like($@, qr/\QOne argument must be passed to "T1::m1" attribute/, "$test : One argument must be passed");
 
 
 test 'Normal accessor with default';
@@ -230,7 +230,7 @@ $o->m11(2);
 is($o->m11, 2, "$test : set and get");
 is($o->m11(2), $o, "$test : set return");
 eval {$o->m11(1, 2)};
-like($@, qr/\QOne argument must be passed to "T1::m11()"/, "$test : One argument must be passed");
+like($@, qr/\QOne argument must be passed to "T1::m11" attribute/, "$test : One argument must be passed");
 $o = T1->new;
 is($o->m11, 1, "$test : default");
 is($o->m12, 9, "$test : default sub reference");
@@ -324,3 +324,21 @@ $o = T3->new;
 is($o->x, 1);
 is($o->y, 2);
 is($o->z, 3);
+{
+    package T4;
+    use Object::Simple -base => 'T3';
+}
+$o = T4->new;
+is($o->x, 1);
+is($o->y, 2);
+is($o->z, 3);
+
+{
+    package T4_2;
+    use Object::Simple -base => 'T3_2';
+}
+$o = T4_2->new;
+is($o->x, 1);
+is($o->y, 2);
+is($o->z, 3);
+
