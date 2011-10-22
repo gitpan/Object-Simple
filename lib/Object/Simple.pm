@@ -1,6 +1,6 @@
 package Object::Simple;
 
-our $VERSION = '3.0622';
+our $VERSION = '3.0624';
 
 use strict;
 use warnings;
@@ -60,16 +60,8 @@ sub import {
 }
 
 sub new {
-    my $class = shift;
-    
-    return bless {%{$_[0]}}, ref $class || $class
-      if ref $_[0] eq 'HASH';
-    
-    Carp::croak(qq{Hash reference or even number arguments } . 
-                qq{must be passed to "${class}::new" method})
-      if @_ % 2;
-    
-    return bless {@_}, ref $class || $class;
+  my $class = shift;
+  bless @_ ? @_ > 1 ? {@_} : {%{$_[0]}} : {}, ref $class || $class;
 }
 
 sub attr {
@@ -102,18 +94,12 @@ sub attr {
 
 
 $code = sub {
-
-    if(@_ > 1) {
-        Carp::croak qq{One argument must be passed to "${class}::$attr" attribute}
-          if @_ > 2;
-        
-        $_[0]->{$attr} = $_[1];
-        
-        return $_[0];
+    if(@_ == 1) {
+        return $_[0]->{$attr} = $default->($_[0]) unless exists $_[0]->{$attr};
+        $_[0]->{$attr};
     }
-
-    return $_[0]->{$attr} = $default->($_[0]) if ! exists $_[0]->{$attr};
-    return $_[0]->{$attr};
+    $_[0]->{$attr} = $_[1];
+    return $_[0];
 }
 
         }
@@ -122,16 +108,12 @@ $code = sub {
 
 
 $code = sub {
-    if(@_ > 1) {
-        Carp::croak qq{One argument must be passed to "${class}::$attr" attribute}
-          if @_ > 2;
-        
-        $_[0]->{$attr} = $_[1];
-        
-        return $_[0];
+    if(@_ == 1) {
+        return $_[0]->{$attr} = $default unless exists $_[0]->{$attr};
+        return $_[0]->{$attr};
     }
-    return $_[0]->{$attr} = $default if ! exists $_[0]->{$attr};
-    return $_[0]->{$attr};
+    $_[0]->{$attr} = $_[1];
+    $_[0];
 }
 
 
@@ -142,18 +124,9 @@ $code = sub {
 
 
 $code = sub {
-
-    if(@_ > 1) {
-        
-        Carp::croak qq{One argument must be passed to "${class}::$attr" attribute}
-          if @_ > 2;
-        
-        $_[0]->{$attr} = $_[1];
-        
-        return $_[0];
-    }
-
-    return $_[0]->{$attr};
+    return $_[0]->{$attr} if @_ == 1;
+    $_[0]->{$attr} = $_[1];
+    $_[0];
 }
 
 
@@ -353,6 +326,24 @@ hash or hash reference as arguments.
 
 Create attribute.
 C<attr> method usage is equal to C<has> method.
+
+=head1 DEPRECATED FUNCTIONALITY
+
+    class_attr method # will be removed 2017/1/1
+    dual_attr method # will be removed 2017/1/1
+
+=head1 BACKWARDS COMPATIBILITY POLICY
+
+If a functionality is DEPRECATED, you can know it by DEPRECATED warnings
+except for attribute method.
+You can check all DEPRECATED functionalities by document.
+DEPRECATED functionality is removed after five years,
+but if at least one person use the functionality and tell me that thing
+I extend one year each time he tell me it.
+
+EXPERIMENTAL functionality will be changed without warnings.
+
+(This policy was changed at 2011/10/22)
 
 =head1 BUGS
 
