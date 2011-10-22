@@ -1,6 +1,6 @@
 package Object::Simple;
 
-our $VERSION = '3.0624';
+our $VERSION = '3.0625';
 
 use strict;
 use warnings;
@@ -96,10 +96,10 @@ sub attr {
 $code = sub {
     if(@_ == 1) {
         return $_[0]->{$attr} = $default->($_[0]) unless exists $_[0]->{$attr};
-        $_[0]->{$attr};
+        return $_[0]->{$attr};
     }
     $_[0]->{$attr} = $_[1];
-    return $_[0];
+    $_[0];
 }
 
         }
@@ -224,7 +224,6 @@ implemented. L<Object::Simple> is similar with L<Mojo::Base>.
 C<new> can receive hash or hash reference as arguments.
 You can specify default value for the attribute.
 Compile speed is fast and used memory is small.
-Debugging is easy.
 
 =head1 GUIDE
 
