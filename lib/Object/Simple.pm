@@ -1,12 +1,12 @@
 package Object::Simple;
 
-our $VERSION = '3.0625';
+our $VERSION = '3.0626';
 
 use strict;
 use warnings;
 no warnings 'redefine';
 
-use Carp ;
+use Carp ();
 
 sub import {
     my ($class, @methods) = @_;

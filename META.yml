@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Object-Simple
-version:            3.0625
+version:            3.0626
 abstract:           Create attribute method, and provide constructor
 author:
     - Yuki Kimoto <kimoto.yuki@gmail.com>
