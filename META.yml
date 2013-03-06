@@ -1,5 +1,5 @@
 ---
-abstract: 'Mojo::Base porting. very simple class builder.'
+abstract: 'Simple class builder(Mojo::Base porting)'
 author:
   - 'Yuki Kimoto <kimoto.yuki@gmail.com>'
 build_requires:
@@ -19,4 +19,4 @@ no_index:
     - inc
 requires:
   Test::More: 0
-version: 3.07
+version: 3.08
