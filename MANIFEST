@@ -1,11 +1,12 @@
 Changes
 lib/Object/Simple.pm
 lib/Object/Simple/Accessor.pm
-lib/Object/Simple/Guide.pod
 Makefile.PL
 MANIFEST			This list of files
 README
 t/object-simple.t
+t/object-simple/Role1.pm
+t/object-simple/Role2.pm
 t/object-simple/T1.pm
 t/object-simple/T2.pm
 t/object-simple/T3.pm

@@ -2,11 +2,144 @@ use Test::More 'no_plan';
 use strict;
 use warnings;
 
+use lib 't/object-simple';
+
+# role
+{
+  # role - use both -base and with 2
+  {
+    {
+      package T10;
+      use Object::Simple -base => 'T2', with => ['Role1', 'Role2'];
+    }
+    
+    {
+      my $o = T10->new;
+      is($o->x, 1);
+      is($o->role1_method1, 'role1_method1');
+    }
+  }
+  
+  # role - use both -base and with 1
+  {
+    {
+      package T9;
+      use T2 -base, with => ['Role1', 'Role2'];
+    }
+    
+    {
+      my $o = T9->new;
+      is($o->x, 1);
+      is($o->role1_method1, 'role1_method1');
+    }
+  }
+  
+  # role - call super class method
+  {
+    {
+      package T8;
+      use Object::Simple -base, with => ['Role1', 'Role2'];
+      
+      sub role1_method1 {
+        my $self = shift;
+        
+        return 'a ' . $self->SUPER::role1_method1();
+      }
+    }
+    
+    {
+      my $o = T8->new;
+      is($o->role1_method1, 'a role1_method1');
+    }
+  }
+
+  # role - after role is high privilage
+  {
+    {
+      package T7;
+      use Object::Simple -base, with => ['Role1', 'Role2'];
+    }
+    
+    {
+      my $o = T7->new;
+      is($o->same_method1, 'role2_same_method1');
+    }
+  }
+  
+  # role - include two role
+  {
+    {
+      package T6;
+      use Object::Simple -base, with => ['Role1', 'Role2'];
+    }
+    
+    {
+      my $o = T6->new;
+      is($o->role1_method1, 'role1_method1');
+      is($o->role2_method1, 'role2_method1');
+    }
+  }
+  
+  # role - include one role
+  {
+    {
+      package T5;
+      use Object::Simple -base, with => 'Role1';
+    }
+    
+    {
+      my $o = T5->new;
+      is($o->role1_method1, 'role1_method1');
+    }
+  }
+}
+
+# -base flag
+{
+  {
+    use T2;
+    my $o = T2->new;
+    is($o->x, 1);
+    is($o->y, 2);
+  }
+  
+  {
+    use T3;
+    my $o = T3->new;
+    is($o->x, 1);
+    is($o->y, 2);
+    is($o->z, 3);
+  }
+  
+  {
+      package T4;
+      use Object::Simple -base => 'T3';
+  }
+  
+  {
+    my $o = T4->new;
+    is($o->x, 1);
+    is($o->y, 2);
+    is($o->z, 3);
+  }
+
+  {
+      package T4_2;
+      use Object::Simple -base => 'T3_2';
+  }
+  
+  {
+    my $o = T4_2->new;
+    is($o->x, 1);
+    is($o->y, 2);
+    is($o->z, 3);
+  }
+}
+
+
 # Test name
 my $test;
 sub test {$test = shift}
-
-use lib 't/object-simple';
 
 my $o;
 
@@ -195,7 +328,7 @@ test 'Method export error';
     package T4;
     eval "use Object::Simple 'none';";
 }
-like($@, qr/Cannot export 'none'/, "$test");
+like($@, qr/'none' is invalid option/, "$test");
 
 test 'Inherit class_attr';
 is_deeply(T1->m27, {a1 => 1}, "$test : no effect : hash");
@@ -295,33 +428,4 @@ $o = T1->new;
 $o->attr('from_object');
 ok($o->can('from_object'), $test);
 
-
-test '-base flag';
-use T2;
-$o = T2->new;
-is($o->x, 1);
-is($o->y, 2);
-
-use T3;
-$o = T3->new;
-is($o->x, 1);
-is($o->y, 2);
-is($o->z, 3);
-{
-    package T4;
-    use Object::Simple -base => 'T3';
-}
-$o = T4->new;
-is($o->x, 1);
-is($o->y, 2);
-is($o->z, 3);
-
-{
-    package T4_2;
-    use Object::Simple -base => 'T3_2';
-}
-$o = T4_2->new;
-is($o->x, 1);
-is($o->y, 2);
-is($o->z, 3);
 
