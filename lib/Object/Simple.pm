@@ -1,6 +1,6 @@
 package Object::Simple;
 
-our $VERSION = '3.11';
+our $VERSION = '3.12';
 
 use strict;
 use warnings;
@@ -67,9 +67,9 @@ sub import {
     if ($base_class) {
       $base_class =~ s/::|'/\//g;
       require "$base_class.pm" unless $base_class->can('new');
-      push @{"${caller}::ISA"}, $base_class;
+      @{"${caller}::ISA"} = ($base_class);
     }
-    else { push @{"${caller}::ISA"}, $class }
+    else { @{"${caller}::ISA"} = ($class) }
     
     # Roles
     for my $role (@$roles) {
@@ -94,7 +94,7 @@ sub import {
       $role_for =~ s/\.pm$//;
       
       my $role_for_content = $role_content;
-      $role_for_content =~ s/package\s+(.+?);/package $role_for;/;
+      $role_for_content =~ s/package\s+([a-zA-Z0-9:]+?)\b/package $role_for/;
       eval $role_for_content;
       Carp::croak $@ if $@;
       
