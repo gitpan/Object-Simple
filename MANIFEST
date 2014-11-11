@@ -6,9 +6,9 @@ MANIFEST			This list of files
 README
 t/object-simple.t
 t/object-simple/Role1.pm
-t/object-simple/Role2.pm
+t/object-simple/Some/Role2.pm
+t/object-simple/Some/T2.pm
 t/object-simple/T1.pm
-t/object-simple/T2.pm
 t/object-simple/T3.pm
 t/object-simple/T3_2.pm
 xt/boilerplate.t
